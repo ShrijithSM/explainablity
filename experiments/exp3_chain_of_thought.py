@@ -11,6 +11,7 @@ into a smooth topological shape (Beta_0 approaches 1) and become non-stationary.
 import sys
 import os
 import gc
+import argparse
 import torch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -26,7 +27,15 @@ from chronoscope.synthesizer import ReportSynthesizer
 console = Console()
 
 
-def run(config: ChronoscopeConfig = None):
+def _build_prompt(config: ChronoscopeConfig, prompt_override: str | None = None) -> str:
+    """Build a run prompt without injecting CoT directives."""
+    base_prompt = (prompt_override or config.clean_prompt or "").strip()
+    if not base_prompt:
+        raise ValueError("Prompt is empty. Provide --prompt or set config.clean_prompt.")
+    return base_prompt
+
+
+def run(config: ChronoscopeConfig = None, prompt: str | None = None):
     """Execute Experiment 3: Chain-of-Thought Topology."""
 
     if config is None:
@@ -34,13 +43,17 @@ def run(config: ChronoscopeConfig = None):
 
     console.rule("[bold blue]Chronoscope — Experiment 3: Chain-of-Thought Topology[/]")
 
-    # ── Step 1: Algorithmic Prompt ──────────────────────────────────────
-    prompt = (
+    # ── Step 1: Generalized Prompt ──────────────────────────────────────
+    default_prompt = (
         "Box A has 5 apples. Box B has 2 apples. "
         "I move 2 apples from Box A to Box B. "
         "Then I move 1 apple from Box B to Box A. "
-        "How many apples are in Box A? Let's think step by step:"
+        "How many apples are in Box A?"
     )
+    if not getattr(config, "clean_prompt", None):
+        config.clean_prompt = default_prompt
+
+    prompt = _build_prompt(config, prompt_override=prompt)
     config.clean_prompt = prompt
     config.max_new_tokens = 60  # Give it enough room to explain its steps
 
@@ -85,7 +98,8 @@ def run(config: ChronoscopeConfig = None):
         # --- TRUE PARALLEL CPU ANALYSIS ---
         # AirLLM's sequential layer loading now blocks only the background thread.
         # The main thread uses this "free" CPU time for real-time anomaly tracking!
-        target_layer = list(current_traj.keys())[-1] if current_traj else None
+        from chronoscope.models import get_deepest_layer
+        target_layer = get_deepest_layer(current_traj.keys()) if current_traj else None
         if target_layer and len(current_traj[target_layer]) > prompt_len:
             gen_only_traj = current_traj[target_layer][prompt_len:]
             
@@ -96,14 +110,14 @@ def run(config: ChronoscopeConfig = None):
             if live_stats.get('topological_anomaly_detected'):
                 console.print(f"\n  [red]>> Topological Anomaly detected at: '{new_token}'[/] ({live_stats['diagnostics']})")
     
-    console.print("[/italic]\n")
+    console.print("\n")
 
     # --- POST-GENERATION CLEANUP ---
     if not clean_traj:
-         console.print("[red]Error: No trajectory captured.[/]")
-         return
+        raise RuntimeError("No trajectory captured from generation stream.")
          
-    target_layer = sorted(clean_traj.keys())[-1]
+    from chronoscope.models import get_deepest_layer
+    target_layer = get_deepest_layer(clean_traj.keys())
     traj_tensor = clean_traj[target_layer]
     
     # ── GC: Free streaming trajectory dict (we extracted the specific layer we need) ──
@@ -112,11 +126,11 @@ def run(config: ChronoscopeConfig = None):
 
     gen_tensor = traj_tensor[prompt_len:]
     if gen_tensor.shape[0] < 5:
-        console.print("[red]Warning: Generated text too short. Using full trajectory.[/]")
-        analysis_tensor = traj_tensor
-    else:
-        console.print(f"  Analyzing purely the {gen_tensor.shape[0]} generated tokens.")
-        analysis_tensor = gen_tensor
+        raise RuntimeError(
+            f"Generated trajectory too short for analysis: {gen_tensor.shape[0]} tokens (need >= 5)."
+        )
+    console.print(f"  Analyzing purely the {gen_tensor.shape[0]} generated tokens.")
+    analysis_tensor = gen_tensor
 
     # ── Step 5: Time Series Analysis ────────────────────────────────────
     console.print(f"\n[bold]Step 5:[/] Running sequence analysis on thought trace...")
@@ -156,19 +170,14 @@ def run(config: ChronoscopeConfig = None):
     )
     console.print(f"  Patched generated: [italic]{patched_text}[/]")
 
-    if target_layer in patched_traj:
-        p_tensor = patched_traj[target_layer]
-        p_gen_tensor = p_tensor[prompt_len:] if p_tensor.shape[0] > prompt_len else p_tensor
-        # Need to compress this patched trajectory using observer to compute DTW
-        try:
-            patched_compressed, _, _ = observer.svd_compress(p_gen_tensor)
-            dtw_results = analyzer.dtw_divergence(clean_compressed, patched_compressed)
-            console.print(f"  DTW distance: {dtw_results['dtw_distance']:.4f}")
-        except Exception as e:
-            console.print(f"[red]DTW matching failed:[/] {e}")
-            dtw_results = {"dtw_distance": 0.0, "dtw_normalized": 0.0, "path_length": 0}
-    else:
-        dtw_results = {"dtw_distance": 0.0, "dtw_normalized": 0.0, "path_length": 0}
+    if target_layer not in patched_traj:
+        raise RuntimeError(f"Patched trajectory missing required layer: {target_layer}")
+
+    p_tensor = patched_traj[target_layer]
+    p_gen_tensor = p_tensor[prompt_len:] if p_tensor.shape[0] > prompt_len else p_tensor
+    patched_compressed, _, _ = observer.svd_compress(p_gen_tensor)
+    dtw_results = analyzer.dtw_divergence(clean_compressed, patched_compressed)
+    console.print(f"  DTW distance: {dtw_results['dtw_distance']:.4f}")
 
     # ── Step 8: Validity Score ──────────────────────────────────────────
     console.print(f"\n[bold]Step 8:[/] Computing validity...")
@@ -188,12 +197,11 @@ def run(config: ChronoscopeConfig = None):
     # ── Step 9: Report Generation ───────────────────────────────────────
     console.print(f"\n[bold]Step 9:[/] Generating topological report...")
     
-    # Send mock patching result dictionary
+    # Use only real metadata gathered during this run.
     patching_results = {
-        "heatmap": None,
         "clean_text": clean_text,
         "layer_names": [target_layer],
-        "token_labels": [],
+        "token_labels": interceptor.get_token_labels(prompt, clean_text),
     }
 
     report_path = synthesizer.generate_report(
@@ -215,4 +223,17 @@ def run(config: ChronoscopeConfig = None):
 
 
 if __name__ == "__main__":
-    run()
+    parser = argparse.ArgumentParser(
+        description="Experiment 3: Chain-of-Thought Topological Mapping"
+    )
+    parser.add_argument(
+        "-p",
+        "--prompt",
+        type=str,
+        default=None,
+        help="Custom prompt to analyze (no CoT prefix is injected).",
+    )
+    args = parser.parse_args()
+
+    cfg = ChronoscopeConfig()
+    run(cfg, prompt=args.prompt)

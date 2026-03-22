@@ -34,7 +34,7 @@ Examples:
     parser.add_argument(
         "--experiment",
         type=str,
-        choices=["exp1", "exp2"],
+        choices=["exp1", "exp2", "exp3", "exp5", "exp6"],
         help="Which experiment to run.",
     )
     parser.add_argument(
@@ -112,6 +112,20 @@ Examples:
         from experiments.exp2_causal_heatmap import run
 
         run(config)
+    elif args.experiment == "exp3":
+        from experiments.exp3_chain_of_thought import run
+
+        run(config)
+    elif args.experiment == "exp5":
+        from experiments.exp5_eager_nexus import run
+
+        import asyncio
+        asyncio.run(run(config))
+    elif args.experiment == "exp6":
+        from experiments.exp6_head_interference import run
+
+        import asyncio
+        asyncio.run(run(config))
     else:
         parser.print_help()
 

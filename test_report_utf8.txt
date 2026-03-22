@@ -1,0 +1,165 @@
+﻿============================= test session starts =============================
+platform win32 -- Python 3.12.7, pytest-7.4.3, pluggy-1.0.0 -- C:\Users\sxhil_25660\anaconda3\python.exe
+cachedir: .pytest_cache
+rootdir: C:\dev\explainablity
+plugins: anyio-4.12.1, dash-3.3.0, jaxtyping-0.3.4, langsmith-0.7.6, asyncio-0.21.1, typeguard-4.4.4
+asyncio: mode=Mode.STRICT
+collecting ... collected 23 items
+
+chronoscope/tests/test_perturbation.py::TestAblationHook::test_zero_mode_sets_slice_to_zero FAILED [  4%]
+chronoscope/tests/test_perturbation.py::TestAblationHook::test_zero_mode_preserves_other_heads FAILED [  8%]
+chronoscope/tests/test_perturbation.py::TestAblationHook::test_mean_mode_preserves_scale FAILED [ 13%]
+chronoscope/tests/test_perturbation.py::TestAblationHook::test_mean_mode_is_constant_across_sequence FAILED [ 17%]
+chronoscope/tests/test_perturbation.py::TestAblationHook::test_gaussian_mode_changes_values FAILED [ 21%]
+chronoscope/tests/test_perturbation.py::TestCoTSegmenter::test_basic_segmentation PASSED [ 26%]
+chronoscope/tests/test_perturbation.py::TestCoTSegmenter::test_step_coverage PASSED [ 30%]
+chronoscope/tests/test_perturbation.py::TestCoTSegmenter::test_aggregation_shape PASSED [ 34%]
+chronoscope/tests/test_significance.py::TestGrangerPvalueMatrix::test_shape_and_diagonal PASSED [ 39%]
+chronoscope/tests/test_significance.py::TestGrangerPvalueMatrix::test_detects_true_causality PASSED [ 43%]
+chronoscope/tests/test_significance.py::TestGrangerPvalueMatrix::test_non_causal_pairs_large_pval PASSED [ 47%]
+chronoscope/tests/test_significance.py::TestFDRCorrection::test_fewer_rejections_than_raw PASSED [ 52%]
+chronoscope/tests/test_significance.py::TestFDRCorrection::test_strong_signal_survives_fdr PASSED [ 56%]
+chronoscope/tests/test_significance.py::TestFDRCorrection::test_significant_pairs_sorted PASSED [ 60%]
+chronoscope/tests/test_stationarity.py::TestPerHeadStationarity::test_stationary_all_pass PASSED [ 65%]
+chronoscope/tests/test_stationarity.py::TestPerHeadStationarity::test_nonstationary_all_flagged PASSED [ 69%]
+chronoscope/tests/test_stationarity.py::TestPerHeadStationarity::test_mixed_correct_mask FAILED [ 73%]
+chronoscope/tests/test_stationarity.py::TestSelectiveDifferencing::test_output_shape PASSED [ 78%]
+chronoscope/tests/test_stationarity.py::TestSelectiveDifferencing::test_undifferenced_heads_trimmed_only PASSED [ 82%]
+chronoscope/tests/test_stationarity.py::TestSelectiveDifferencing::test_differenced_heads_are_diff PASSED [ 86%]
+chronoscope/tests/test_stationarity.py::TestJointStationarity::test_diagnoses_stationary PASSED [ 91%]
+chronoscope/tests/test_stationarity.py::TestJointStationarity::test_diagnoses_unit_root PASSED [ 95%]
+chronoscope/tests/test_stationarity.py::TestJointStationarity::test_summary_keys PASSED [100%]
+
+================================== FAILURES ===================================
+_____________ TestAblationHook.test_zero_mode_sets_slice_to_zero ______________
+
+self = <chronoscope.tests.test_perturbation.TestAblationHook object at 0x000002110FB561E0>
+
+    def test_zero_mode_sets_slice_to_zero(self):
+>       out, original, h, hd = self._simulate_hook('zero')
+
+chronoscope\tests\test_perturbation.py:34: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <chronoscope.tests.test_perturbation.TestAblationHook object at 0x000002110FB561E0>
+mode = 'zero', h_source = 1, n_heads = 4, head_dim = 16, seq_len = 10
+
+    def _simulate_hook(self, mode, h_source=1, n_heads=4, head_dim=16, seq_len=10):
+        """Run the ablation hook on a synthetic tensor and return output."""
+        analyzer = self._get_analyzer()
+>       hook = analyzer._make_ablation_hook(h_source, head_dim, mode=mode)
+E       AttributeError: 'CausalAnalyzer' object has no attribute '_make_ablation_hook'. Did you mean: '_make_ablation_model'?
+
+chronoscope\tests\test_perturbation.py:24: AttributeError
+____________ TestAblationHook.test_zero_mode_preserves_other_heads ____________
+
+self = <chronoscope.tests.test_perturbation.TestAblationHook object at 0x000002110FB57DA0>
+
+    def test_zero_mode_preserves_other_heads(self):
+>       out, original, h, hd = self._simulate_hook('zero')
+
+chronoscope\tests\test_perturbation.py:39: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <chronoscope.tests.test_perturbation.TestAblationHook object at 0x000002110FB57DA0>
+mode = 'zero', h_source = 1, n_heads = 4, head_dim = 16, seq_len = 10
+
+    def _simulate_hook(self, mode, h_source=1, n_heads=4, head_dim=16, seq_len=10):
+        """Run the ablation hook on a synthetic tensor and return output."""
+        analyzer = self._get_analyzer()
+>       hook = analyzer._make_ablation_hook(h_source, head_dim, mode=mode)
+E       AttributeError: 'CausalAnalyzer' object has no attribute '_make_ablation_hook'. Did you mean: '_make_ablation_model'?
+
+chronoscope\tests\test_perturbation.py:24: AttributeError
+_______________ TestAblationHook.test_mean_mode_preserves_scale _______________
+
+self = <chronoscope.tests.test_perturbation.TestAblationHook object at 0x00000211710D8DA0>
+
+    def test_mean_mode_preserves_scale(self):
+>       out, original, h, hd = self._simulate_hook('mean')
+
+chronoscope\tests\test_perturbation.py:48: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <chronoscope.tests.test_perturbation.TestAblationHook object at 0x00000211710D8DA0>
+mode = 'mean', h_source = 1, n_heads = 4, head_dim = 16, seq_len = 10
+
+    def _simulate_hook(self, mode, h_source=1, n_heads=4, head_dim=16, seq_len=10):
+        """Run the ablation hook on a synthetic tensor and return output."""
+        analyzer = self._get_analyzer()
+>       hook = analyzer._make_ablation_hook(h_source, head_dim, mode=mode)
+E       AttributeError: 'CausalAnalyzer' object has no attribute '_make_ablation_hook'. Did you mean: '_make_ablation_model'?
+
+chronoscope\tests\test_perturbation.py:24: AttributeError
+_________ TestAblationHook.test_mean_mode_is_constant_across_sequence _________
+
+self = <chronoscope.tests.test_perturbation.TestAblationHook object at 0x00000211710D8EC0>
+
+    def test_mean_mode_is_constant_across_sequence(self):
+>       out, original, h, hd = self._simulate_hook('mean', seq_len=20)
+
+chronoscope\tests\test_perturbation.py:58: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <chronoscope.tests.test_perturbation.TestAblationHook object at 0x00000211710D8EC0>
+mode = 'mean', h_source = 1, n_heads = 4, head_dim = 16, seq_len = 20
+
+    def _simulate_hook(self, mode, h_source=1, n_heads=4, head_dim=16, seq_len=10):
+        """Run the ablation hook on a synthetic tensor and return output."""
+        analyzer = self._get_analyzer()
+>       hook = analyzer._make_ablation_hook(h_source, head_dim, mode=mode)
+E       AttributeError: 'CausalAnalyzer' object has no attribute '_make_ablation_hook'. Did you mean: '_make_ablation_model'?
+
+chronoscope\tests\test_perturbation.py:24: AttributeError
+_____________ TestAblationHook.test_gaussian_mode_changes_values ______________
+
+self = <chronoscope.tests.test_perturbation.TestAblationHook object at 0x00000211710D8FE0>
+
+    def test_gaussian_mode_changes_values(self):
+>       out, original, h, hd = self._simulate_hook('gaussian')
+
+chronoscope\tests\test_perturbation.py:66: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <chronoscope.tests.test_perturbation.TestAblationHook object at 0x00000211710D8FE0>
+mode = 'gaussian', h_source = 1, n_heads = 4, head_dim = 16, seq_len = 10
+
+    def _simulate_hook(self, mode, h_source=1, n_heads=4, head_dim=16, seq_len=10):
+        """Run the ablation hook on a synthetic tensor and return output."""
+        analyzer = self._get_analyzer()
+>       hook = analyzer._make_ablation_hook(h_source, head_dim, mode=mode)
+E       AttributeError: 'CausalAnalyzer' object has no attribute '_make_ablation_hook'. Did you mean: '_make_ablation_model'?
+
+chronoscope\tests\test_perturbation.py:24: AttributeError
+_______________ TestPerHeadStationarity.test_mixed_correct_mask _______________
+
+self = <chronoscope.tests.test_stationarity.TestPerHeadStationarity object at 0x0000021171236450>
+
+    def test_mixed_correct_mask(self):
+        analyzer = self._get_analyzer()
+        series = _make_mixed_series()
+        result = analyzer._test_per_head_stationarity(series)
+        # First 2 heads should be stationary, last 2 non-stationary
+        assert result['is_stationary'][0] and result['is_stationary'][1]
+>       assert result['diff_mask'][2] and result['diff_mask'][3]
+E       assert (False)
+
+chronoscope\tests\test_stationarity.py:90: AssertionError
+============================== warnings summary ===============================
+..\..\Users\sxhil_25660\anaconda3\Lib\site-packages\astor\op_util.py:92
+  C:\Users\sxhil_25660\anaconda3\Lib\site-packages\astor\op_util.py:92: DeprecationWarning: ast.Num is deprecated and will be removed in Python 3.14; use ast.Constant instead
+    precedence_data = dict((getattr(ast, x, None), z) for x, y, z in op_data)
+
+..\..\Users\sxhil_25660\anaconda3\Lib\site-packages\pandas\core\arrays\masked.py:56
+  C:\Users\sxhil_25660\anaconda3\Lib\site-packages\pandas\core\arrays\masked.py:56: UserWarning: Pandas requires version '1.4.2' or newer of 'bottleneck' (version '1.3.7' currently installed).
+    from pandas.core import (
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED chronoscope/tests/test_perturbation.py::TestAblationHook::test_zero_mode_sets_slice_to_zero
+FAILED chronoscope/tests/test_perturbation.py::TestAblationHook::test_zero_mode_preserves_other_heads
+FAILED chronoscope/tests/test_perturbation.py::TestAblationHook::test_mean_mode_preserves_scale
+FAILED chronoscope/tests/test_perturbation.py::TestAblationHook::test_mean_mode_is_constant_across_sequence
+FAILED chronoscope/tests/test_perturbation.py::TestAblationHook::test_gaussian_mode_changes_values
+FAILED chronoscope/tests/test_stationarity.py::TestPerHeadStationarity::test_mixed_correct_mask
+================== 6 failed, 17 passed, 2 warnings in 15.04s ==================

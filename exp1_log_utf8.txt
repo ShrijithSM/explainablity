@@ -1,0 +1,364 @@
+﻿python : 2026-03-22 16:44:13.161411: I 
+tensorflow/core/util/port.cc:153] oneDNN custom 
+operations are on. You may see slightly different 
+numerical results due to floating-point round-off 
+errors from different computation orders. To turn 
+them off, set the environment variable 
+`TF_ENABLE_ONEDNN_OPTS=0`.
+At line:1 char:1
++ python -u c:\dev\explainablity\experiments\exp1_co
+rrelational_mapping ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (2026-0 
+   3-22 16:4...ONEDNN_OPTS=0`.:String) [], RemoteE  
+  xception
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+C:\Users\sxhil_25660\anaconda3\Lib\site-packages\pan
+das\core\arrays\masked.py:56: UserWarning: Pandas 
+requires version '1.4.2' or newer of 'bottleneck' 
+(version '1.3.7' currently installed).
+  from pandas.core import (
+-------------- Chronoscope ù Experiment 1: Correlational Mapping --------------
+
+Step 1: Loading model...
+Loading model: Qwen/Qwen2.5-0.5B on cuda (float16)
+4-bit NF4 quantization enabled (with double-quant).
+`torch_dtype` is deprecated! Use `dtype` instead!
+Model loaded. Parameters: 494,032,768
+
+Hookable layers:
+                         Hookable Layers                         
++---------------------------------------------------------------+
+| Index | Layer Name                                    | Type  |
+|-------+-----------------------------------------------+-------|
+| 0     | model.model.embed_tokens                      | Envoy |
+| 1     | model.model.layers.0.self_attn.q_proj         | Envoy |
+| 2     | model.model.layers.0.self_attn.k_proj         | Envoy |
+| 3     | model.model.layers.0.self_attn.v_proj         | Envoy |
+| 4     | model.model.layers.0.self_attn.o_proj         | Envoy |
+| 5     | model.model.layers.0.self_attn                | Envoy |
+| 6     | model.model.layers.0.mlp.gate_proj            | Envoy |
+| 7     | model.model.layers.0.mlp.up_proj              | Envoy |
+| 8     | model.model.layers.0.mlp.down_proj            | Envoy |
+| 9     | model.model.layers.0.mlp.act_fn               | Envoy |
+| 10    | model.model.layers.0.mlp                      | Envoy |
+| 11    | model.model.layers.0.input_layernorm          | Envoy |
+| 12    | model.model.layers.0.post_attention_layernorm | Envoy |
+| 13    | model.model.layers.0                          | Envoy |
+| 14    | model.model.layers.1.self_attn.q_proj         | Envoy |
+| 15    | model.model.layers.1.self_attn.k_proj         | Envoy |
+| 16    | model.model.layers.1.self_attn.v_proj         | Envoy |
+| 17    | model.model.layers.1.self_attn.o_proj         | Envoy |
+| 18    | model.model.layers.1.self_attn                | Envoy |
+| 19    | model.model.layers.1.mlp.gate_proj            | Envoy |
+| 20    | model.model.layers.1.mlp.up_proj              | Envoy |
+| 21    | model.model.layers.1.mlp.down_proj            | Envoy |
+| 22    | model.model.layers.1.mlp.act_fn               | Envoy |
+| 23    | model.model.layers.1.mlp                      | Envoy |
+| 24    | model.model.layers.1.input_layernorm          | Envoy |
+| 25    | model.model.layers.1.post_attention_layernorm | Envoy |
+| 26    | model.model.layers.1                          | Envoy |
+| 27    | model.model.layers.2.self_attn.q_proj         | Envoy |
+| 28    | model.model.layers.2.self_attn.k_proj         | Envoy |
+| 29    | model.model.layers.2.self_attn.v_proj         | Envoy |
+| ...   | (291 more)                                    | ...   |
++---------------------------------------------------------------+
+
+Total hookable modules: 321
+
+Step 2: Initializing Chronoscope components...
+Interceptor attached to 24 layers.
+
+Step 3: Capturing reasoning trajectory...
+  Prompt: All cats are animals. Whiskers is a cat. Therefore, Whiskers is a
+C:\Users\sxhil_25660\anaconda3\Lib\site-packages\tra
+nsformers\generation\utils.py:2534: UserWarning: 
+You are calling .generate() with the `input_ids` 
+being on a device type different than your model's 
+device. `input_ids` is on cuda, whereas the model 
+is on meta. You may experience unexpected behaviors 
+or slower generation. Please make sure that you 
+have put `input_ids` to the correct device by 
+calling for example input_ids = 
+input_ids.to('meta') before running `.generate()`.
+  warnings.warn(
+You have set `compile_config`, but we are unable to 
+meet the criteria for compilation. Compilation will 
+be skipped.
+Exception in thread Thread-3 (trace):
+Traceback (most recent call last):
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\nnsight\intervention\envoy.py", line 1100, in 
+trace
+    tracer.capture()
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\nnsight\intervention\tracing\tracer.py", line 
+336, in capture
+    super().capture()
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\nnsight\intervention\tracing\base.py", line 
+334, in capture
+    start_line, source_lines, node = 
+self.parse(source_lines, start_line)
+                                     
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\nnsight\intervention\tracing\base.py", line 
+432, in parse
+    raise WithBlockNotFoundError(message)
+nnsight.intervention.tracing.base.WithBlockNotFoundE
+rror: With block not found at line 12
+We looked here:
+
+
+    """
+    try:
+        if self._target is not None:
+            self._target(*self._args, 
+**self._kwargs) <--- HERE
+    finally:
+        # Avoid a refcycle if the thread is running 
+a function with
+        # an argument that has a member that points 
+to the thread.
+        del self._target, self._args, self._kwargs
+
+
+During handling of the above exception, another 
+exception occurred:
+
+Traceback (most recent call last):
+  File 
+"C:\Users\sxhil_25660\anaconda3\Lib\threading.py", 
+line 1075, in _bootstrap_inner
+    self.run()
+  File 
+"C:\Users\sxhil_25660\anaconda3\Lib\threading.py", 
+line 1012, in run
+    self._target(*self._args, **self._kwargs)
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\nnsight\intervention\envoy.py", line 1106, in 
+trace
+    return value(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\nnsight\modeling\language.py", line 155, in 
+__nnsight_generate__
+    output = self._model.generate(*args, 
+streamer=streamer, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\torch\utils\_contextlib.py", line 120, in 
+decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\transformers\generation\utils.py", line 2566, 
+in generate
+    result = decoding_method(
+             ^^^^^^^^^^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\transformers\generation\utils.py", line 2786, 
+in _sample
+    outputs = self(**model_inputs, return_dict=True)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\torch\nn\modules\module.py", line 1775, in 
+_wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\torch\nn\modules\module.py", line 1881, in 
+_call_impl
+    return inner()
+           ^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\torch\nn\modules\module.py", line 1829, in 
+inner
+    result = forward_call(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\nnsight\intervention\interleaver.py", line 
+244, in nnsight_forward
+    return m.__nnsight_forward__(m, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\transformers\utils\generic.py", line 918, in 
+wrapper
+    output = func(self, *args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\transformers\models\qwen2\modeling_qwen2.py", 
+line 449, in forward
+    outputs: BaseModelOutputWithPast = self.model(
+                                       ^^^^^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\torch\nn\modules\module.py", line 1775, in 
+_wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\torch\nn\modules\module.py", line 1881, in 
+_call_impl
+    return inner()
+           ^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\torch\nn\modules\module.py", line 1829, in 
+inner
+    result = forward_call(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\nnsight\intervention\interleaver.py", line 
+244, in nnsight_forward
+    return m.__nnsight_forward__(m, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\transformers\utils\generic.py", line 1072, in 
+wrapper
+    outputs = func(self, *args, **kwargs)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\transformers\models\qwen2\modeling_qwen2.py", 
+line 384, in forward
+    hidden_states = decoder_layer(
+                    ^^^^^^^^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\transformers\modeling_layers.py", line 94, in 
+__call__
+    return super().__call__(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\torch\nn\modules\module.py", line 1775, in 
+_wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\torch\nn\modules\module.py", line 1881, in 
+_call_impl
+    return inner()
+           ^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\torch\nn\modules\module.py", line 1829, in 
+inner
+    result = forward_call(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\nnsight\intervention\interleaver.py", line 
+244, in nnsight_forward
+    return m.__nnsight_forward__(m, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\transformers\utils\deprecation.py", line 172, 
+in wrapped_func
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\transformers\models\qwen2\modeling_qwen2.py", 
+line 234, in forward
+    hidden_states, _ = self.self_attn(
+                       ^^^^^^^^^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\torch\nn\modules\module.py", line 1775, in 
+_wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\torch\nn\modules\module.py", line 1881, in 
+_call_impl
+    return inner()
+           ^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\torch\nn\modules\module.py", line 1829, in 
+inner
+    result = forward_call(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\transformers\utils\generic.py", line 1031, in 
+wrapped_forward
+    output = orig_forward(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\nnsight\intervention\interleaver.py", line 
+244, in nnsight_forward
+    return m.__nnsight_forward__(m, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\transformers\utils\deprecation.py", line 172, 
+in wrapped_func
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\transformers\models\qwen2\modeling_qwen2.py", 
+line 158, in forward
+    query_states, key_states = 
+apply_rotary_pos_emb(query_states, key_states, cos, 
+sin)
+                               ^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\transformers\models\qwen2\modeling_qwen2.py", 
+line 79, in apply_rotary_pos_emb
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+               ~~^~~~~
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\torch\_prims_common\wrappers.py", line 309, in 
+_fn
+    result = fn(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\torch\_compile.py", line 53, in inner
+    return disable_fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\torch\_dynamo\eval_frame.py", line 1044, in _fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\torch\_prims_common\wrappers.py", line 149, in 
+_fn
+    result = fn(**bound.arguments)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\torch\_refs\__init__.py", line 1139, in _ref
+    output = prim(a, b)
+             ^^^^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\torch\_refs\__init__.py", line 1746, in mul
+    return prims.mul(a, b)
+           ^^^^^^^^^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\torch\_ops.py", line 841, in __call__
+    return self._op(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\torch\_library\fake_impl.py", line 109, in 
+meta_kernel
+    return fake_impl_holder.kernel(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\torch\_library\utils.py", line 22, in __call__
+    return self.func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\torch\library.py", line 1425, in inner
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\torch\_library\custom_ops.py", line 627, in 
+fake_impl
+    return self._abstract_fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\torch\_prims\__init__.py", line 404, in 
+_prim_elementwise_meta
+    utils.check_same_device(*args_, 
+allow_cpu_scalar_tensors=True)
+  File "C:\Users\sxhil_25660\anaconda3\Lib\site-pack
+ages\torch\_prims_common\__init__.py", line 878, in 
+check_same_device
+    raise RuntimeError(msg)
+RuntimeError: Tensor on device cuda:0 is not on the 
+expected device meta!

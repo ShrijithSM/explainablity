@@ -141,8 +141,16 @@ def main():
             
             # Get clean trajectory first
             add_log("Capturing clean trajectory...")
+            from chronoscope.models import get_deepest_layer
             clean_traj, clean_text = interceptor.capture_generation(prompt)
-            layer_names = sorted(clean_traj.keys())
+            # Sort numerically (layers.0, layers.1, ... layers.23)
+            def get_index(name):
+                parts = name.split(".")
+                for p in reversed(parts):
+                    if p.isdigit():
+                        return int(p)
+                return -1
+            layer_names = sorted(clean_traj.keys(), key=get_index)
             
             # Filter for a subset of layers if too many, to fit on screen
             if len(layer_names) > 8:
@@ -203,7 +211,8 @@ def main():
             
             # 1. Classical Time Series Analysis on Clean Trace
             add_log("Running TS analysis on clean trace...")
-            target_layer = sorted(clean_traj.keys())[-1]
+            from chronoscope.models import get_deepest_layer
+            target_layer = get_deepest_layer(clean_traj.keys())
             traj_tensor = clean_traj[target_layer]
             observer_results = observer.full_analysis(traj_tensor)
             clean_compressed = observer_results["compressed_trajectory"]

@@ -1,0 +1,26 @@
+﻿python : 2026-03-22 16:46:41.305316: I 
+tensorflow/core/util/port.cc:153] oneDNN custom operations 
+are on. You may see slightly different numerical results due 
+to floating-point round-off errors from different computation 
+orders. To turn them off, set the environment variable 
+`TF_ENABLE_ONEDNN_OPTS=0`.
+At line:1 char:1
++ python c:\dev\explainablity\experiments\exp1_correlational_m
+apping.py ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (2026-03-22 16:4. 
+   ..ONEDNN_OPTS=0`.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+C:\Users\sxhil_25660\anaconda3\Lib\site-packages\pandas\core\a
+rrays\masked.py:56: UserWarning: Pandas requires version 
+'1.4.2' or newer of 'bottleneck' (version '1.3.7' currently 
+installed).
+  from pandas.core import (
+-------------- Chronoscope ù Experiment 1: Correlational Mapping --------------
+
+Step 1: Loading model...
+Loading model: Qwen/Qwen2.5-0.5B on cuda (float16)
+4-bit NF4 quantization enabled (with double-quant).
+`torch_dtype` is deprecated! Use `dtype` instead!

@@ -8,7 +8,8 @@ trajectory captured by the Interceptor.
 import numpy as np
 from typing import Dict, Tuple
 from scipy.signal import periodogram
-from statsmodels.tsa.stattools import acf, pacf, adfuller
+# Lazy imports for statsmodels to prevent environment-specific TypeError in deprecated_kwarg
+# from statsmodels.tsa.stattools import acf, pacf, adfuller
 import torch
 
 from .config import ChronoscopeConfig
@@ -22,6 +23,15 @@ class SignalObserver:
 
     def __init__(self, config: ChronoscopeConfig):
         self.config = config
+        # Bridge-facing runtime fields updated during analysis.
+        self.arc_steps = np.array([], dtype=float)
+        self.tau_normalised = 0.0
+        self.hurst_exponent = 0.5
+        self.adf_pval_pc0 = 1.0
+        self._last_tda_result = None
+        self.phase_boundaries = []
+        self.current_phase_idx = None
+        self._ec_history = []  # Rolling EC series for dashboard streaming
 
     # ------------------------------------------------------------------ #
     #  SVD Compression (High-Dim → Tractable Time Series)
@@ -41,21 +51,40 @@ class SignalObserver:
         n = n_components or self.config.svd_components
         X = trajectory.numpy() if isinstance(trajectory, torch.Tensor) else trajectory
 
-        # Center the data (remove mean per dimension)
-        X_centered = X - X.mean(axis=0)
+        # 1. Sanitize: Remove NaNs/Infs
+        X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
 
-        # Full SVD (economy mode)
-        U, S, Vt = np.linalg.svd(X_centered, full_matrices=False)
+        # 2. Filter: Remove constant columns (zero variance)
+        active_cols = np.where(X.std(axis=0) > 1e-6)[0]
+        if len(active_cols) == 0:
+            # Fallback for completely flat trajectory
+            return np.zeros((X.shape[0], n)), np.zeros(n), np.zeros((n, X.shape[1]))
+            
+        X_active = X[:, active_cols]
+
+        # Center the data
+        X_centered = X_active - X_active.mean(axis=0)
+
+        try:
+            # Full SVD (economy mode)
+            U, S, Vt = np.linalg.svd(X_centered, full_matrices=False)
+        except np.linalg.LinAlgError:
+            # Fallback for SVD failure
+            return np.zeros((X.shape[0], n)), np.zeros(n), np.zeros((n, X.shape[1]))
 
         # Project onto top-n components
-        compressed = U[:, :n] * S[:n]  # [Tokens, n]
+        k = min(n, U.shape[1])
+        compressed = np.zeros((X.shape[0], n))
+        compressed[:, :k] = U[:, :k] * S[:k]
         
-        # Explicitly free large intermediate matrices
-        extracted_s = S[:n]
-        extracted_vt = Vt[:n, :]
+        singular_values = np.zeros(n)
+        singular_values[:k] = S[:k]
+        
+        components = np.zeros((n, X.shape[1]))
+        components[:k, active_cols] = Vt[:k, :]
+        
         del U, S, Vt
-        
-        return compressed, extracted_s, extracted_vt
+        return compressed, singular_values, components
 
     # ------------------------------------------------------------------ #
     #  Spectral Analysis (FFT)
@@ -141,8 +170,17 @@ class SignalObserver:
                 "warning": "Sequence too short for meaningful ACF.",
             }
 
-        acf_vals = acf(signal, nlags=max_lag, fft=True)
-        pacf_vals = pacf(signal, nlags=max_lag, method="ywm")
+        try:
+            from statsmodels.tsa.stattools import acf, pacf
+            acf_vals = acf(signal, nlags=max_lag, fft=True)
+            pacf_vals = pacf(signal, nlags=max_lag, method="ywm")
+        except (ImportError, TypeError) as e:
+            return {
+                "acf_values": np.array([1.0]),
+                "pacf_values": np.array([1.0]),
+                "significant_lags": [],
+                "error": f"Statsmodels failure: {e}"
+            }
 
         # Significant lags: |ACF| > 2/sqrt(N) (95% confidence band)
         threshold = 2.0 / np.sqrt(len(signal))
@@ -178,9 +216,11 @@ class SignalObserver:
             }
 
         try:
+            from statsmodels.tsa.stattools import adfuller
             adf_stat, p_value, used_lag, nobs, critical_values, _ = adfuller(
                 signal, autolag="AIC"
             )
+            self.adf_pval_pc0 = float(p_value)
             return {
                 "adf_statistic": float(adf_stat),
                 "p_value": float(p_value),
@@ -248,6 +288,161 @@ class SignalObserver:
             "original": signal,
         }
 
+    def decompose_feature_space(
+        self, feature_series: np.ndarray, period: int = None
+    ) -> Dict:
+        """
+        Robust decomposition for engineered attention features.
+
+        Steps:
+          1) Aggregate multivariate feature level over heads×features
+          2) Use first-difference energy for non-stationary change tracking
+          3) Extract rolling trend and seasonal proxy on detrended level
+          4) Residual + regime score from change-energy z-score
+        """
+        X = np.asarray(feature_series, dtype=float)
+        if X.ndim == 3:
+            t, h, f = X.shape
+            X = X.reshape(t, h * f)
+        elif X.ndim != 2:
+            return {
+                "trend": np.array([]),
+                "seasonal": np.array([]),
+                "residual": np.array([]),
+                "detected_period": None,
+                "original": np.array([]),
+                "delta_energy": np.array([]),
+                "rolling_volatility": np.array([]),
+                "regime_score": np.array([]),
+                "regime_indices": [],
+            }
+
+        X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
+        T = X.shape[0]
+        if T < 4:
+            level = np.mean(np.abs(X), axis=1) if T > 0 else np.array([])
+            return {
+                "trend": level,
+                "seasonal": np.zeros_like(level),
+                "residual": np.zeros_like(level),
+                "detected_period": None,
+                "original": level,
+                "delta_energy": np.zeros_like(level),
+                "rolling_volatility": np.zeros_like(level),
+                "regime_score": np.zeros_like(level),
+                "regime_indices": [],
+            }
+
+        level = np.mean(np.abs(X), axis=1)
+
+        deltas = np.diff(X, axis=0)
+        delta_energy = np.mean(np.abs(deltas), axis=1)
+        delta_energy_full = np.concatenate([[delta_energy[0]], delta_energy])
+
+        trend_win = max(3, min(15, (T // 5) | 1))
+        trend_kernel = np.ones(trend_win, dtype=float) / trend_win
+        trend = np.convolve(level, trend_kernel, mode="same")
+
+        detrended = level - trend
+
+        if period is None:
+            max_lag = max(2, min(T // 3, 20))
+            ac_vals = []
+            base = detrended - detrended.mean()
+            base_std = base.std() + 1e-9
+            for lag in range(2, max_lag + 1):
+                a = base[:-lag]
+                b = base[lag:]
+                corr = float(np.dot(a, b) / ((len(a) * base_std * base_std) + 1e-9))
+                ac_vals.append(corr)
+            if ac_vals:
+                best = int(np.argmax(ac_vals)) + 2
+                period = best
+            else:
+                period = max(2, T // 6)
+
+        period = max(2, min(int(period), max(2, T // 2)))
+        seasonal = np.zeros(T, dtype=float)
+        for i in range(period):
+            idx = np.arange(i, T, period)
+            if len(idx) > 0:
+                seasonal[idx] = detrended[idx].mean()
+
+        residual = level - trend - seasonal
+
+        vol_win = max(3, min(11, (T // 6) | 1))
+        vol_kernel = np.ones(vol_win, dtype=float) / vol_win
+        rolling_vol = np.convolve(delta_energy_full, vol_kernel, mode="same")
+
+        regime_score = (delta_energy_full - delta_energy_full.mean()) / (delta_energy_full.std() + 1e-9)
+        regime_indices = np.where(regime_score > 2.0)[0].tolist()
+
+        return {
+            "trend": trend,
+            "seasonal": seasonal,
+            "residual": residual,
+            "detected_period": period,
+            "original": level,
+            "delta_energy": delta_energy_full,
+            "rolling_volatility": rolling_vol,
+            "regime_score": regime_score,
+            "regime_indices": regime_indices,
+        }
+
+    def calculate_trajectory_dynamics(self, compressed: np.ndarray) -> Dict:
+        """
+        Compute high-level dynamics: Velocity, Acceleration, and Hurst Exponent.
+        Velocity spikes indicate semantic transitions.
+        Hurst > 0.5 indicates logical persistence (intentionality).
+        Hurst ~= 0.5 indicates random walk (hallucination).
+        """
+        n_tokens = compressed.shape[0]
+        if n_tokens < 5:
+            return {"velocity": np.zeros(n_tokens), "acceleration": np.zeros(n_tokens), "hurst": 0.5}
+
+        # 1. Velocity (L2 distance between consecutive hidden states)
+        # Note: We pad with 0 at the start to keep the same length as tokens
+        velocity = np.zeros(n_tokens)
+        diffs = np.diff(compressed, axis=0) # [T-1, D]
+        velocity[1:] = np.linalg.norm(diffs, axis=1)
+
+        # 2. Acceleration (Change in velocity)
+        acceleration = np.zeros(n_tokens)
+        acceleration[1:] = np.abs(np.diff(velocity))
+
+        # 3. Hurst Exponent (Simplified R/S analysis)
+        def compute_hurst(ts):
+            if len(ts) < 10: return 0.5
+            l_ts = np.log(np.abs(ts) + 1e-9)
+            # Standard R/S calculation on log-returns or differences
+            # For simplicity, we use the variance-scaled rescaled range
+            # We'll return 0.7 as a 'mock' if it fails, but here's a basic one
+            try:
+                # Divide into sub-series and check range scaling
+                # (Actual R/S logic)
+                X = ts - np.mean(ts)
+                Y = np.cumsum(X)
+                R = np.max(Y) - np.min(Y)
+                S = np.std(ts) + 1e-9
+                RS = R / S
+                # Hurst approximation: RS = (N/2)^H
+                hurst = np.log(RS) / np.log(len(ts) + 1)
+                return float(np.clip(hurst, 0.0, 1.0))
+            except:
+                return 0.5
+
+        # Calculate Hurst on the primary component (Trend)
+        hurst_val = compute_hurst(compressed[:, 0])
+        self.hurst_exponent = float(hurst_val)
+
+        return {
+            "velocity": velocity,
+            "acceleration": acceleration,
+            "hurst": hurst_val,
+            "mean_velocity": float(np.mean(velocity)),
+            "max_velocity_token": int(np.argmax(velocity))
+        }
+
     # ------------------------------------------------------------------ #
     #  Incremental Parallel Analysis (Phase 3)
     # ------------------------------------------------------------------ #
@@ -308,6 +503,15 @@ class SignalObserver:
         if not hasattr(self, '_prev_chi'):
             self._prev_chi = chi
             self._prev_var = rolling_var
+            self._last_tda_result = {
+                "betti0": None,
+                "betti1": None,
+                "euler": int(chi),
+                "ec_series": [int(chi)],
+                "anomalies": [],
+            }
+            self.phase_boundaries = []
+            self.current_phase_idx = 0
             return {"rolling_variance": rolling_var, "euler_characteristic": int(chi), "topological_anomaly_detected": False}
             
         chi_delta = abs(chi - self._prev_chi)
@@ -321,12 +525,219 @@ class SignalObserver:
             
         self._prev_chi = chi
         self._prev_var = rolling_var
+
+        prev_series = []
+        prev_anoms = []
+        if isinstance(self._last_tda_result, dict):
+            prev_series = list(self._last_tda_result.get("ec_series", []))
+            prev_anoms = list(self._last_tda_result.get("anomalies", []))
+
+        prev_series.append(int(chi))
+        if len(prev_series) > 60:
+            prev_series = prev_series[-60:]
+
+        # Sync _ec_history with the series (used by dashboard for live streaming)
+        self._ec_history = list(prev_series)
+
+        if anomaly:
+            tok_idx = int(trajectory.shape[0] - 1)
+            prev_anoms.append(
+                {
+                    "token_idx": tok_idx,
+                    "severity": "high" if chi_delta >= 3 or var_delta > 2.0 else "medium",
+                    "description": f"Chi delta={int(chi_delta)}, variance ratio={var_delta:.2f}",
+                }
+            )
+            self.phase_boundaries.append(tok_idx)
+
+        self._last_tda_result = {
+            "betti0": None,
+            "betti1": None,
+            "euler": int(chi),
+            "ec_series": prev_series,
+            "anomalies": prev_anoms[-30:],
+        }
+        self.current_phase_idx = len(self.phase_boundaries)
         
         return {
             "rolling_variance": rolling_var,
             "euler_characteristic": int(chi),
             "topological_anomaly_detected": anomaly,
+            "ec_series": list(self._ec_history),
             "diagnostics": f"Chi: {int(chi)} (Delta: {int(chi_delta)}), VarRatio: {var_delta:.2f}"
+        }
+
+    # ------------------------------------------------------------------ #
+    #  Gap D.3: Intrinsic Time (Arc-Length & Curvature)
+    # ------------------------------------------------------------------ #
+
+    def compute_intrinsic_time(
+        self,
+        model=None,
+        token_ids: list = None,
+        layer_idx: int = -1,
+        hidden_states: np.ndarray = None,
+        normalize: bool = True
+    ) -> Dict:
+        """
+        Compute arc-length intrinsic time from the residual stream trajectory.
+
+        If model and token_ids are provided, it uses nnterp trace context to 
+        collect layers_output per token. Otherwise falls back to hidden_states.
+        """
+        if model is not None and token_ids is not None:
+            n_tokens = len(token_ids)
+            hidden_states_per_token = []
+            # Collect residual stream at layer_idx for each generated token
+            for token_idx in range(n_tokens):
+                with model.trace(token_ids[:token_idx+1]):
+                    h = model.layers_output[layer_idx].save()
+                hidden_states_per_token.append(h.value[0, -1, :].cpu().numpy())
+            
+            if not hidden_states_per_token:
+                hidden_states = np.zeros((1, 1))
+            else:
+                hidden_states = np.stack(hidden_states_per_token)
+        elif hidden_states is None:
+            raise ValueError("Must provide either (model, token_ids) or hidden_states")
+            
+        T, D = hidden_states.shape
+
+        if T < 3:
+            self.arc_steps = np.zeros(max(T - 1, 0))
+            self.tau_normalised = 0.0
+            return {
+                'arc_length_steps': np.zeros(max(T - 1, 0)),
+                'intrinsic_time': np.zeros(T),
+                'curvature': np.zeros(max(T - 2, 0)),
+                'high_curvature_idx': np.array([], dtype=int),
+                'velocity': np.zeros(max(T - 1, 0)),
+            }
+
+        import torch
+        import torch.linalg
+
+        # Gap D.2: Arc Length Pathing
+        h_t = torch.as_tensor(hidden_states, dtype=torch.float64)
+
+        # Arc length steps (velocity)
+        diff = h_t[1:] - h_t[:-1]                             # [T-1, D]
+        arc_steps = torch.linalg.norm(diff, dim=-1)           # [T-1]
+
+        # Cumulative intrinsic time
+        tau_raw = torch.cat([
+            torch.zeros(1, device=arc_steps.device, dtype=arc_steps.dtype),
+            torch.cumsum(arc_steps, dim=0)
+        ])
+        
+        tau_norm = tau_raw / tau_raw[-1].clamp(min=1e-9) if normalize else tau_raw
+
+        # Discrete curvature: ||second difference|| / ||first difference||²
+        second_diff  = h_t[2:] - 2 * h_t[1:-1] + h_t[:-2]     # [T-2, D]
+        second_norms = torch.linalg.norm(second_diff, dim=-1) # [T-2]
+        first_norms  = arc_steps[:-1]                         # [T-2]
+        curvature    = second_norms / torch.maximum(first_norms.pow(2), torch.tensor(1e-8, device=h_t.device))
+
+        # High curvature positions
+        kappa_mean = curvature.mean()
+        kappa_std  = curvature.std(unbiased=False)
+        high_curv_idx = torch.where(curvature > kappa_mean + 2 * kappa_std)[0] + 1
+
+        arc_steps_np = arc_steps.cpu().numpy()
+        tau_np = tau_norm.cpu().numpy()
+        self.arc_steps = arc_steps_np
+        self.tau_normalised = float(tau_np[-1]) if tau_np.size else 0.0
+
+        return {
+            'arc_length_steps': arc_steps_np,
+            'intrinsic_time': tau_np,
+            'curvature': curvature.cpu().numpy(),
+            'high_curvature_idx': high_curv_idx.cpu().numpy(),
+            'velocity': arc_steps_np, # Velocity is dz/dt
+        }
+
+    # ------------------------------------------------------------------ #
+    #  Gap A.5: Joint Stationarity Test (ADF + KPSS)
+    # ------------------------------------------------------------------ #
+
+    def joint_stationarity_test(self, metric_series: np.ndarray) -> Dict:
+        """
+        Run both ADF and KPSS on each head series independently.
+
+        Interpretation table:
+            ADF reject (p<0.05) + KPSS fail-to-reject → stationary
+            ADF fail-to-reject  + KPSS reject         → non-stationary (unit root)
+            ADF reject          + KPSS reject          → FRACTIONALLY INTEGRATED
+            ADF fail-to-reject  + KPSS fail-to-reject  → ambiguous
+
+        Args:
+            metric_series: np.ndarray [T, H]
+
+        Returns:
+            dict with 'per_head' results and summary counts
+        """
+        try:
+            from statsmodels.tsa.stattools import adfuller, kpss
+        except ImportError:
+            return {'error': 'statsmodels not installed', 'per_head': []}
+
+        T, H = metric_series.shape
+        results = []
+
+        for h in range(H):
+            s = metric_series[:, h]
+            if len(s) < 10 or np.std(s) < 1e-9:
+                results.append({
+                    'head': h,
+                    'adf_pval': 1.0,
+                    'kpss_pval': 0.0,
+                    'adf_stationary': False,
+                    'kpss_stationary': False,
+                    'diagnosis': 'constant' if np.std(s) < 1e-9 else 'too_short',
+                })
+                continue
+
+            try:
+                adf_pval = adfuller(s, autolag='AIC')[1]
+            except Exception:
+                adf_pval = 1.0
+
+            try:
+                import warnings
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    kpss_stat, kpss_pval, _, _ = kpss(s, regression='c', nlags='auto')
+            except Exception:
+                kpss_pval = 0.0
+
+            adf_stationary = adf_pval < 0.05
+            kpss_stationary = kpss_pval > 0.05
+
+            if adf_stationary and kpss_stationary:
+                diagnosis = 'stationary'
+            elif not adf_stationary and not kpss_stationary:
+                diagnosis = 'unit_root'
+            elif adf_stationary and not kpss_stationary:
+                diagnosis = 'fractional'
+            else:
+                diagnosis = 'ambiguous'
+
+            results.append({
+                'head': h,
+                'adf_pval': float(adf_pval),
+                'kpss_pval': float(kpss_pval),
+                'adf_stationary': adf_stationary,
+                'kpss_stationary': kpss_stationary,
+                'diagnosis': diagnosis,
+            })
+
+        fractional_heads = [r['head'] for r in results if r['diagnosis'] == 'fractional']
+
+        return {
+            'per_head': results,
+            'fractional_heads': fractional_heads,
+            'summary': {d: sum(1 for r in results if r['diagnosis'] == d)
+                        for d in ('stationary', 'unit_root', 'fractional', 'ambiguous', 'constant', 'too_short')},
         }
 
     # ------------------------------------------------------------------ #
@@ -360,6 +771,19 @@ class SignalObserver:
         # Step 5: Decomposition
         decomposition = self.decompose(compressed)
 
+        # Step 6: Trajectory Dynamics (Velocity/Acceleration/Hurst)
+        dynamics = self.calculate_trajectory_dynamics(compressed)
+        self.hurst_exponent = float(dynamics.get("hurst", self.hurst_exponent))
+
+        # Step 7: Intrinsic Time (Gap D.3)
+        intrinsic_time = self.compute_intrinsic_time(hidden_states=compressed)
+
+        # Keep observer-level scalars for dashboard bridge.
+        self.tau_normalised = float(intrinsic_time["intrinsic_time"][-1]) if len(intrinsic_time["intrinsic_time"]) else 0.0
+        self.arc_steps = np.asarray(intrinsic_time["arc_length_steps"], dtype=float)
+        if isinstance(stationarity, dict) and stationarity.get("p_value") is not None:
+            self.adf_pval_pc0 = float(stationarity["p_value"])
+
         return {
             "compressed_trajectory": compressed,
             "singular_values": singular_values,
@@ -368,6 +792,8 @@ class SignalObserver:
             "autocorrelation": autocorr,
             "stationarity": stationarity,
             "decomposition": decomposition,
+            "dynamics": dynamics,
+            "intrinsic_time": intrinsic_time,
             "meta": {
                 "n_tokens": compressed.shape[0],
                 "n_svd_components": compressed.shape[1],

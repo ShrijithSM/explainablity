@@ -3,8 +3,10 @@ Model loading utilities for local HuggingFace causal LMs.
 Supports Qwen, DeepSeek, LLaMA, Mistral — any AutoModelForCausalLM.
 """
 
+import os
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from huggingface_hub import snapshot_download
 from rich.console import Console
 from rich.table import Table
 
@@ -25,12 +27,36 @@ def load_model(config: ChronoscopeConfig):
         f"on {config.device} ({config.torch_dtype})"
     )
 
+    # Keep all model/tokenizer metadata resolution offline for reproducibility
+    # and to avoid intermittent hub connection resets in restricted networks.
+    os.environ.setdefault("HF_HUB_OFFLINE", "1")
+    os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+
     kwargs = {
         "torch_dtype": config.get_torch_dtype(),
         "device_map": "auto",
         "trust_remote_code": True,
         "low_cpu_mem_usage": True,
+        "local_files_only": True, # Prevents huggingface_hub from phoning home and hitting ConnectionResetError
+        "attn_implementation": "eager" if not config.use_airllm else None,
     }
+
+    model_ref = config.model_name
+    local_pin = getattr(config, "local_model_snapshot_path", None)
+    if local_pin and os.path.isdir(local_pin):
+        model_ref = local_pin
+        console.print(f"[dim]Using pinned local snapshot:[/] {model_ref}")
+    else:
+        try:
+            model_ref = snapshot_download(
+                repo_id=config.model_name,
+                local_files_only=True,
+            )
+            console.print(f"[dim]Using local model snapshot:[/] {model_ref}")
+        except Exception:
+            # Fall back to the original id. If cache is missing, the caller gets
+            # a clear error from the underlying loader.
+            model_ref = config.model_name
 
     if config.use_airllm:
         from airllm import AutoModel
@@ -41,7 +67,7 @@ def load_model(config: ChronoscopeConfig):
         compression_arg = '4bit' if config.load_in_4bit else None
         
         base_model = AutoModel.from_pretrained(
-            config.model_name,
+            model_ref,
             compression=compression_arg
         )
         
@@ -71,10 +97,10 @@ def load_model(config: ChronoscopeConfig):
                     "[red]bitsandbytes not installed. Loading without quantization.[/]"
                 )
 
-        model = AutoModelForCausalLM.from_pretrained(config.model_name, **kwargs)
+        model = AutoModelForCausalLM.from_pretrained(model_ref, **kwargs)
         
     tokenizer = AutoTokenizer.from_pretrained(
-        config.model_name, trust_remote_code=True
+        model_ref, trust_remote_code=True, local_files_only=True
     )
 
     # Ensure pad token exists (many models lack one)
@@ -83,6 +109,9 @@ def load_model(config: ChronoscopeConfig):
 
     if not config.use_airllm:
         model.eval()
+        if hasattr(model, "config"):
+            model.config.output_attentions = True
+            model.config.return_dict = True
         console.print(
             f"[bold green]Model loaded.[/] "
             f"Parameters: {sum(p.numel() for p in model.parameters()):,}"
@@ -122,3 +151,21 @@ def list_hookable_layers(model, max_display: int = 60):
     console.print(f"\n[bold]Total hookable modules:[/] {len(layers)}")
 
     return layers
+
+
+def get_deepest_layer(layer_names: list) -> str:
+    """
+    Returns the structurally deepest layer based on numerical suffix.
+    Handles 'layers.0', 'layers.1', ..., 'layers.23' correctly.
+    """
+    if not layer_names:
+        return ""
+    
+    def extract_index(name):
+        parts = name.split('.')
+        for p in reversed(parts):
+            if p.isdigit():
+                return int(p)
+        return -1
+        
+    return max(layer_names, key=extract_index)

@@ -13,9 +13,16 @@ class ChronoscopeConfig:
 
     # --- Model ---
     model_name: str = "Qwen/Qwen2.5-0.5B" # Changed to 7B
+    n_heads: int = 14
+    hidden_dim: int = 896
+    total_tokens: int = 100
+    target_layer: int = 23
+    local_model_snapshot_path: Optional[str] = (
+        r"C:\Users\sxhil_25660\.cache\huggingface\hub\models--Qwen--Qwen2.5-0.5B\snapshots\060db6499f32faf8b98477b0a26969ef7d8b9987"
+    )
     use_airllm: bool = False # Direct loading is now primary (resolves disk space issues)
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
-    load_in_4bit: bool = False  # Disabled for 0.5B models (avoids .to() conflicts)
+    load_in_4bit: bool = True  # Enabled for 7B models on 6GB VRAM
     torch_dtype: str = "float16"
 
     airllm_vram_headroom_gb: float = 1.0  # GB reserved for activations/buffers
@@ -43,9 +50,19 @@ class ChronoscopeConfig:
     patching_noise: str = "gaussian"  # "zero", "mean", or "gaussian"
     dtw_radius: int = 5  # Sakoe-Chiba band radius for DTW speedup
     # Sliding-window TDA on the compressed trajectory for more local topology.
-    tda_window_size: int = 40
+    tda_window_size: int = 10        # reduced from 40 for finer anomaly detection (Exp4)
+    tda_distance_threshold: float = 2.0  # ripser distance threshold (Exp4)
     tda_window_stride: int = 20
     tda_enable_windowed: bool = True
+    optimize_sweep: bool = True
+    
+    # ── Analysis modes (Exp3 → Exp6) ───────────────────────────────────────
+    analyse_generated_only: bool = True   # exclude prompt tokens from VAR/TDA
+    prompt_token_count: int = 0           # set at runtime from tokenizer
+
+    # ── Exp6 layer/head selection ──────────────────────────────────────────
+    exp6_top_k_layers: int = 3
+    exp6_top_k_heads: int = 3
 
     # --- Synthesizer ---
     report_dir: str = "reports"
@@ -53,10 +70,69 @@ class ChronoscopeConfig:
 
     # --- Experiment ---
     max_new_tokens: int = 50
+    dashboard_transport: str = "websocket"
+    dashboard_ws_port: int = 8765
+    dashboard_http_port: int = 8766
+    dashboard_html_path: str = "integration_hub/frontend/public/chronoscope_live.html"
+    dashboard_stat_every: int = 5             # signal quality cadence (tokens)
+    dashboard_tda_every: int = 1              # TDA fires on spike (not cadenced)
     clean_prompt: str = (
         "All cats are animals. Whiskers is a cat. Therefore, Whiskers is a"
     )
     corrupted_prompt: Optional[str] = None  # Auto-generated if None
+
+    # ── Gap 0: Sweep (Exp2, gated) ────────────────────────────────────────
+    run_causal_sweep: bool = False            # gate for optional deep-dive
+    causal_sweep_n_pairs: int = 30            # top-k pairs to perturb in sweep
+
+    # ── Gap A: Stationarity & Cointegration ────────────────────────────────
+    var_lag_selection: str = 'aic'            # 'aic' | 'bic' | 'fixed'
+    var_max_lags: int = 5                     # ceiling for IC selection
+    run_johansen_cointegration: bool = True   # VECM if cointegrated
+    joint_stationarity_test: bool = True      # run both ADF + KPSS
+
+    # ── Gap B: Statistical Significance ────────────────────────────────────
+    granger_ftest: bool = True                # Granger F-test p-value matrix
+    fdr_alpha: float = 0.05                   # BH-FDR target
+    enable_bootstrap_surrogates: bool = False # expensive (500 VAR fits)
+    n_bootstrap_surrogates: int = 500
+    use_transfer_entropy: bool = False        # amber — model-free TE
+    compute_pdc: bool = False                 # partial directed coherence
+
+    # ── Gap C: Perturbation / Intervention ─────────────────────────────────
+    perturbation_mode: str = 'zero'           # 'zero' | 'mean' | 'gaussian'
+    reference_prompts: List[str] = field(default_factory=lambda: [
+        "The capital of France is Paris.",
+        "Solve for x: 2x + 3 = 7.",
+        "Once upon a time in a distant land,",
+        "The mitochondria is the powerhouse of the cell.",
+        "import numpy as np",
+        "Water boils at 100 degrees Celsius.",
+        "The French Revolution began in 1789.",
+        "To be or not to be, that is the question.",
+        "The quick brown fox jumps over the lazy dog.",
+        "In mathematics, a prime number is divisible only by 1 and itself.",
+    ])
+    run_activation_patching: bool = False
+    activation_patch_clean: str = ""
+    activation_patch_corrupted: str = ""
+
+    # ── Gap D: Thinking Time Axis ──────────────────────────────────────────
+    use_cot_time_axis: bool = False           # segment tokens into CoT steps
+    cot_prompt_prefix: str = "Let's think step by step."
+    use_topological_phase_clock: bool = True  # Euler characteristic phases
+    euler_spike_threshold_std: float = 2.0
+    use_arc_length_resampling: bool = False   # equal cognitive effort
+    arc_length_n_points: int = 80
+    use_hmm_phase_discovery: bool = False     # amber — requires hmmlearn
+    hmm_n_states: int = 4
+
+    # ── Gap E: Signal Quality ──────────────────────────────────────────────
+    head_metric_type: str = 'shannon_entropy' # 'shannon_entropy' | 'renyi_entropy_2' | 'effective_rank'
+    head_feature_mode: str = 'scalar'         # 'scalar' | 'vector' (5-dim)
+    remove_attention_sink: bool = True        # remove BOS sink artifact
+    attention_sink_positions: Optional[List[int]] = None   # None = auto-detect
+    compute_ov_metric: bool = False           # requires v_proj hook
 
     def get_torch_dtype(self):
         dtype_map = {

@@ -13,3 +13,4 @@ from .interceptor import ChronoscopeInterceptor
 from .observer import SignalObserver
 from .analyzer import CausalAnalyzer
 from .synthesizer import ReportSynthesizer
+from .dashboard_bridge import DashboardBridge

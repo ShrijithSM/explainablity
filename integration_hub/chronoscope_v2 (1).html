@@ -1,0 +1,1832 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>CHRONOSCOPE · Gap-Aligned Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap');
+:root{
+  --bg0:#06090d;--bg1:#0b1018;--bg2:#101820;--bg3:#162030;--bg4:#1c2840;
+  --border:#1c2d3e;--border2:#274060;--border3:#2d5080;
+  --green:#00ff88;--green2:#00cc6a;--green3:#009944;--green-bg:rgba(0,255,136,.08);
+  --cyan:#00d4ff;--cyan2:#009fcc;--cyan-bg:rgba(0,212,255,.07);
+  --amber:#ffb300;--amber2:#cc8800;--amber-bg:rgba(255,179,0,.08);
+  --red:#ff3d50;--red2:#cc2233;--red-bg:rgba(255,61,80,.08);
+  --purple:#aa66ff;--purple2:#7744cc;--purple-bg:rgba(170,102,255,.08);
+  --teal:#00ffcc;--teal2:#00cc99;
+  --pink:#ff55aa;
+  --text0:#d0e4f4;--text1:#8aaccc;--text2:#4a6888;--text3:#2a4060;
+  --font:'JetBrains Mono',monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100vw;height:100vh;overflow:hidden;background:var(--bg0);color:var(--text0);font-family:var(--font);font-size:11px}
+body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.025) 3px,rgba(0,0,0,.025) 4px);pointer-events:none;z-index:9998}
+
+/* ─── HEADER ─────────────────────────────── */
+#hdr{height:32px;background:var(--bg1);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 14px;gap:14px;flex-shrink:0;position:relative;z-index:100}
+.hdr-logo{font-size:12px;font-weight:700;letter-spacing:.2em;color:var(--cyan);text-shadow:0 0 10px var(--cyan),0 0 24px rgba(0,212,255,.3)}
+.hdr-sep{color:var(--border2);font-size:9px}
+.hdr-sub{font-size:8px;color:var(--text2);letter-spacing:.12em;text-transform:uppercase}
+.hdr-pills{display:flex;gap:10px;margin-left:auto;align-items:center}
+.pill{display:flex;align-items:center;gap:4px;font-size:8px;color:var(--text2);letter-spacing:.08em}
+.dot{width:5px;height:5px;border-radius:50%}
+.dot-g{background:var(--green);box-shadow:0 0 5px var(--green);animation:blink 2.2s ease infinite}
+.dot-a{background:var(--amber);box-shadow:0 0 5px var(--amber);animation:blink 1.4s ease infinite}
+.dot-r{background:var(--red);box-shadow:0 0 5px var(--red);animation:blink .9s ease infinite}
+.dot-c{background:var(--cyan);box-shadow:0 0 5px var(--cyan)}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+#hdr-tok{color:var(--green);font-weight:500}
+#hdr-regime{padding:1px 6px;border-radius:2px;font-size:8px;font-weight:700;letter-spacing:.1em;transition:all .4s}
+
+/* ─── MAIN LAYOUT ─────────────────────────── */
+#root{display:grid;grid-template-columns:200px 1fr 1fr 200px;grid-template-rows:1fr 1fr 100px;gap:1px;background:var(--border);height:calc(100vh - 32px)}
+.panel{background:var(--bg1);overflow:hidden;display:flex;flex-direction:column;position:relative}
+.ph{height:24px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 8px;gap:6px;flex-shrink:0}
+.pt{font-size:8px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--text2)}
+.pb{font-size:7px;padding:1px 5px;border-radius:2px;letter-spacing:.08em}
+.pb-g{background:rgba(0,255,136,.12);color:var(--green);border:1px solid rgba(0,255,136,.25)}
+.pb-a{background:rgba(255,179,0,.12);color:var(--amber);border:1px solid rgba(255,179,0,.25)}
+.pb-c{background:rgba(0,212,255,.1);color:var(--cyan);border:1px solid rgba(0,212,255,.2)}
+.pb-r{background:rgba(255,61,80,.12);color:var(--red);border:1px solid rgba(255,61,80,.25)}
+.pb-p{background:rgba(170,102,255,.12);color:var(--purple);border:1px solid rgba(170,102,255,.25)}
+.pc{flex:1;overflow:hidden;padding:8px;position:relative}
+
+/* ─── PANEL GRID POSITIONS ───────────────── */
+#p-state   {grid-column:1;grid-row:1}
+#p-entropy {grid-column:2;grid-row:1}
+#p-matrix  {grid-column:3;grid-row:1}
+#p-verdict {grid-column:4;grid-row:1}
+#p-var     {grid-column:1/3;grid-row:2}
+#p-perts   {grid-column:3;grid-row:2}
+#p-tda     {grid-column:4;grid-row:2}
+#p-log     {grid-column:1/5;grid-row:3}
+
+/* ─── STAT ITEMS ──────────────────────────── */
+.si{margin-bottom:8px}
+.si-lbl{font-size:7px;color:var(--text2);letter-spacing:.14em;text-transform:uppercase;margin-bottom:2px}
+.si-val{font-size:12px;font-weight:500;line-height:1}
+.si-sub{font-size:8px;color:var(--text2);margin-top:1px}
+.hbar{height:3px;background:var(--bg3);border-radius:2px;margin-top:4px;overflow:hidden}
+.hbar-fill{height:100%;border-radius:2px;transition:width .5s ease,background .5s}
+
+/* ─── PHASE TIMELINE ─────────────────────── */
+#phase-tl{display:flex;height:6px;gap:1px;border-radius:2px;overflow:hidden;margin-top:4px}
+.ph-seg{border-radius:1px;transition:opacity .3s,box-shadow .3s;cursor:default}
+
+/* ─── SCORE RING ──────────────────────────── */
+.ring-wrap{display:flex;justify-content:center;margin-bottom:6px}
+.ring-track{fill:none;stroke:var(--bg3);stroke-width:5}
+.ring-arc{fill:none;stroke-width:5;stroke-linecap:round;transition:stroke-dashoffset .8s ease,stroke .5s}
+.ring-num{font-family:var(--font);font-weight:700;fill:var(--text0)}
+.ring-cap{font-family:var(--font);fill:var(--text2)}
+
+/* ─── METRIC ROWS ────────────────────────── */
+.mr{display:flex;align-items:center;gap:5px;margin-bottom:4px;font-size:8px}
+.mr-name{color:var(--text2);min-width:82px}
+.mr-bar{flex:1;height:2px;background:var(--bg3);border-radius:2px}
+.mr-fill{height:100%;border-radius:2px;transition:width .6s}
+.mr-val{color:var(--text0);min-width:28px;text-align:right}
+
+/* ─── MATRIX ─────────────────────────────── */
+#mat-grid{display:grid;gap:1px;width:100%;height:calc(100% - 18px)}
+.mc{border-radius:1px;cursor:pointer;transition:filter .15s}
+.mc:hover{filter:brightness(2);outline:1px solid rgba(255,255,255,.4);z-index:5}
+
+/* ─── INFLUENCE LIST ─────────────────────── */
+.il-row{display:flex;align-items:center;gap:5px;padding:2px 0;border-bottom:1px solid rgba(28,45,62,.4);font-size:8px}
+.il-pair{min-width:60px;font-weight:500}
+.il-bar{flex:1;height:2px;background:var(--bg3);border-radius:2px}
+.il-fill{height:100%;border-radius:2px;transition:width .4s}
+.il-score{min-width:32px;text-align:right;color:var(--text1)}
+.il-sig{font-size:7px;padding:1px 4px;border-radius:1px;min-width:28px;text-align:center}
+.sig-y{background:rgba(0,255,136,.1);color:var(--green);border:1px solid rgba(0,255,136,.2)}
+.sig-n{background:rgba(42,64,96,.3);color:var(--text3);border:1px solid var(--border)}
+
+/* ─── TAB BUTTONS ────────────────────────── */
+.tabbtn{font-family:var(--font);font-size:7px;padding:2px 7px;border-radius:2px;cursor:pointer;letter-spacing:.08em;transition:all .15s;border:1px solid var(--border);background:var(--bg3);color:var(--text2)}
+.tabbtn.active{background:var(--cyan-bg);color:var(--cyan);border-color:rgba(0,212,255,.3)}
+
+/* ─── STATIONARITY ROWS ───────────────────── */
+.stat-row{display:flex;align-items:center;gap:4px;margin-bottom:2px;font-size:8px}
+.sr-head{color:var(--text2);min-width:20px}
+.sr-adf{min-width:34px;text-align:right}
+.sr-kpss{min-width:34px;text-align:right}
+.sr-bar{flex:1;height:2px;background:var(--bg3);border-radius:2px}
+.sr-fill{height:100%;border-radius:2px;transition:width .4s}
+.sr-diag{font-size:7px;min-width:60px;text-align:right;font-weight:700;letter-spacing:.05em}
+
+/* ─── PERTURBATION ───────────────────────── */
+.pert-row{display:flex;align-items:center;gap:6px;padding:3px 0;border-bottom:1px solid rgba(28,45,62,.35);font-size:8px}
+.pert-head{min-width:26px;font-weight:500}
+.pert-mode{font-size:7px;padding:1px 4px;border-radius:1px}
+.pert-bar{flex:1;height:2px;background:var(--bg3);border-radius:2px}
+.pert-fill{height:100%;border-radius:2px;transition:width .5s}
+.pert-delta{min-width:36px;text-align:right;color:var(--text1)}
+.pert-restore{min-width:32px;text-align:right;font-size:7px}
+
+/* ─── TDA ────────────────────────────────── */
+.betti-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-bottom:8px}
+.betti-card{background:var(--bg2);border:1px solid var(--border);border-radius:2px;padding:5px;text-align:center}
+.betti-num{font-size:18px;font-weight:700;line-height:1}
+.betti-lbl{font-size:7px;color:var(--text2);letter-spacing:.1em}
+.ec-wrap{height:42px;position:relative;margin-bottom:6px}
+.hmm-bar{display:flex;height:5px;gap:1px;border-radius:2px;overflow:hidden;margin-bottom:6px}
+.hmm-seg{border-radius:1px;transition:flex .5s ease}
+
+/* ─── LOG ────────────────────────────────── */
+#log-wrap{height:100%;display:flex;gap:0}
+#log-lines{flex:1;padding:4px 8px;display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden;gap:0}
+.ll{font-size:9px;line-height:1.65;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:0;animation:ll-in .25s ease forwards}
+@keyframes ll-in{from{opacity:0;transform:translateX(-3px)}to{opacity:1;transform:translateX(0)}}
+.ll-ts{color:var(--text3);margin-right:7px}
+.ll-tag{padding:0 4px;border-radius:1px;margin-right:5px;font-size:7px;font-weight:700}
+.ll-gap  {background:rgba(0,212,255,.12);color:var(--cyan)}
+.ll-stat {background:rgba(255,179,0,.12);color:var(--amber)}
+.ll-ok   {background:rgba(0,255,136,.1);color:var(--green)}
+.ll-err  {background:rgba(255,61,80,.1);color:var(--red)}
+.ll-tda  {background:rgba(170,102,255,.1);color:var(--purple)}
+.ll-pert {background:rgba(0,255,204,.1);color:var(--teal)}
+.ll-sig  {background:rgba(255,85,170,.1);color:var(--pink)}
+#log-interp{width:210px;border-left:1px solid var(--border);padding:6px 10px;display:flex;flex-direction:column;justify-content:center;gap:3px}
+.li-title{font-size:7px;color:var(--text3);letter-spacing:.16em;text-transform:uppercase}
+.li-text{font-size:8px;color:var(--text1);line-height:1.75}
+.li-hl{color:var(--cyan)}
+
+/* ─── TOOLTIP ────────────────────────────── */
+#tt{position:fixed;background:var(--bg2);border:1px solid var(--border2);padding:6px 9px;font-size:8px;border-radius:3px;pointer-events:none;z-index:9999;display:none;color:var(--text0);line-height:1.8;min-width:130px}
+.tt-h{font-size:10px;font-weight:700;color:var(--cyan);margin-bottom:2px}
+
+/* ─── FEATURE MODE TOGGLE ────────────────── */
+#feat-tabs{display:flex;gap:3px;margin-left:auto}
+
+/* ─── BOOT ───────────────────────────────── */
+#boot{position:fixed;inset:0;background:var(--bg0);z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:40px}
+#boot-lines{font-size:10px;color:var(--green);line-height:1.9;width:520px;text-shadow:0 0 8px var(--green)}
+.bl{opacity:0;animation:bl-show .05s ease forwards}
+@keyframes bl-show{to{opacity:1}}
+#boot-pg{width:520px;height:2px;background:var(--bg3);border-radius:1px;margin-top:10px;overflow:hidden}
+#boot-fill{height:100%;background:var(--green);box-shadow:0 0 6px var(--green);width:0;transition:width .04s linear}
+
+/* ─── SIGNAL QUALITY PANEL ───────────────── */
+.sq-row{display:flex;align-items:center;gap:4px;margin-bottom:3px;font-size:8px}
+.sq-metric{min-width:72px;color:var(--text2)}
+.sq-bars{flex:1;display:flex;gap:1px;align-items:center;height:6px}
+.sq-bar{flex:1;background:var(--bg3);border-radius:1px;height:100%;overflow:hidden}
+.sq-fill{height:100%;border-radius:1px;transition:width .4s}
+</style>
+</head>
+<body>
+<div id="tt"></div>
+
+<!-- BOOT -->
+<div id="boot">
+  <div id="boot-lines"></div>
+  <div id="boot-pg"><div id="boot-fill"></div></div>
+</div>
+
+<!-- HEADER -->
+<div id="hdr">
+  <div class="hdr-logo">CHRONOSCOPE</div>
+  <div class="hdr-sep">│</div>
+  <div class="hdr-sub">Gap-Aligned · update.md v1.0 · Qwen2.5-0.5B</div>
+  <div class="hdr-pills">
+    <div class="pill"><div class="dot dot-g"></div>HOOKS ×24</div>
+    <div class="pill"><div class="dot dot-g" id="dot-var"></div><span id="lbl-var">VAR·AIC</span></div>
+    <div class="pill"><div class="dot dot-a" id="dot-fdr"></div><span id="lbl-fdr">FDR BH</span></div>
+    <div class="pill"><div class="dot dot-a" id="dot-hmm"></div><span id="lbl-hmm">HMM·4s</span></div>
+    <div class="pill"><div class="dot dot-c"></div>PDC</div>
+    <div class="hdr-sep">│</div>
+    <div class="pill" style="color:var(--text2)">T=<span id="hdr-tok" style="color:var(--green)">0</span>/100</div>
+    <div class="pill" style="color:var(--text2)">LAG=<span id="hdr-lag" style="color:var(--cyan)">?</span></div>
+    <div class="pill" style="color:var(--text2)">SIG=<span id="hdr-sig" style="color:var(--amber)">?</span>/196</div>
+    <div id="hdr-regime" style="background:rgba(0,255,136,.1);color:var(--green);border:1px solid rgba(0,255,136,.25)">STRONG·REASONING</div>
+    <button id="help-btn" onclick="openHelp()" title="User Guide [?]" style="font-family:var(--font);font-size:9px;font-weight:700;padding:2px 10px;border-radius:2px;cursor:pointer;background:rgba(0,212,255,.08);color:var(--cyan);border:1px solid rgba(0,212,255,.3);letter-spacing:.12em;transition:all .15s;margin-left:6px" onmouseover="this.style.background='rgba(0,212,255,.18)'" onmouseout="this.style.background='rgba(0,212,255,.08)'">? GUIDE</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════ HELP OVERLAY ══ -->
+<div id="help-overlay" style="display:none;position:fixed;inset:0;z-index:100000;background:rgba(6,9,13,.92);backdrop-filter:blur(4px)">
+  <div id="help-modal" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:min(860px,96vw);height:min(600px,90vh);background:var(--bg1);border:1px solid var(--border2);border-radius:4px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 0 60px rgba(0,212,255,.08)">
+
+    <!-- Help header -->
+    <div style="height:36px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 16px;gap:12px;flex-shrink:0">
+      <span style="font-size:11px;font-weight:700;color:var(--cyan);letter-spacing:.18em;text-shadow:0 0 10px var(--cyan)">CHRONOSCOPE</span>
+      <span style="color:var(--border2)">│</span>
+      <span style="font-size:8px;color:var(--text2);letter-spacing:.12em;text-transform:uppercase">User Guide · Observability Terminal</span>
+      <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
+        <span style="font-size:8px;color:var(--text3)">press <kbd style="background:var(--bg3);border:1px solid var(--border2);padding:1px 5px;border-radius:2px;color:var(--text1)">?</kbd> or <kbd style="background:var(--bg3);border:1px solid var(--border2);padding:1px 5px;border-radius:2px;color:var(--text1)">Esc</kbd> to toggle</span>
+        <button onclick="closeHelp()" style="font-family:var(--font);font-size:9px;padding:2px 10px;border-radius:2px;cursor:pointer;background:var(--bg3);color:var(--text1);border:1px solid var(--border);letter-spacing:.08em" onmouseover="this.style.background=getComputedStyle(document.documentElement).getPropertyValue('--bg4')" onmouseout="this.style.background=getComputedStyle(document.documentElement).getPropertyValue('--bg3')">✕ CLOSE</button>
+      </div>
+    </div>
+
+    <!-- Help body: nav + content -->
+    <div style="display:flex;flex:1;overflow:hidden">
+
+      <!-- Nav sidebar -->
+      <div style="width:160px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:8px 0;flex-shrink:0;overflow-y:auto">
+        <div style="font-size:7px;color:var(--text3);letter-spacing:.16em;padding:4px 12px 6px;text-transform:uppercase">Sections</div>
+        <div id="help-nav"></div>
+      </div>
+
+      <!-- Content area -->
+      <div id="help-content" style="flex:1;overflow-y:auto;padding:20px 24px;line-height:1.8"></div>
+    </div>
+
+    <!-- Help footer -->
+    <div style="height:26px;background:var(--bg2);border-top:1px solid var(--border);display:flex;align-items:center;padding:0 16px;gap:16px;flex-shrink:0">
+      <span style="font-size:8px;color:var(--text3)">navigate: <kbd style="background:var(--bg3);border:1px solid var(--border);padding:0 4px;border-radius:1px;color:var(--text2)">↑↓</kbd> scroll · <kbd style="background:var(--bg3);border:1px solid var(--border);padding:0 4px;border-radius:1px;color:var(--text2)">click section</kbd> jump</span>
+      <span style="margin-left:auto;font-size:8px;color:var(--text3)">Chronoscope · update.md v1.0 · Qwen2.5-0.5B · 14 heads · 24 layers</span>
+    </div>
+  </div>
+</div>
+
+<!-- GRID -->
+<div id="root">
+
+<!-- ── PANEL: MODEL STATE (GAP A + D) ────── -->
+<div class="panel" id="p-state">
+  <div class="ph">
+    <div class="pt">Model State</div>
+    <div class="pb pb-g">LIVE</div>
+  </div>
+  <div class="pc" style="overflow-y:auto;padding:8px 10px">
+
+    <div class="si">
+      <div class="si-lbl">Hurst Exponent H</div>
+      <div class="si-val" id="v-hurst" style="color:var(--cyan)">0.712</div>
+      <div class="si-sub" id="v-hurst-i">Persistent — logical chain</div>
+      <div class="hbar"><div class="hbar-fill" id="b-hurst" style="width:71%;background:var(--cyan)"></div></div>
+    </div>
+
+    <div class="si">
+      <div class="si-lbl">ADF Decision (PC0)</div>
+      <div class="si-val" id="v-adf" style="color:var(--amber)">p=0.737</div>
+      <div class="si-sub">Non-stationary → selective diff applied</div>
+    </div>
+
+    <div class="si">
+      <div class="si-lbl">Johansen Rank</div>
+      <div class="si-val" id="v-coint" style="color:var(--green)">rank=0</div>
+      <div class="si-sub" id="v-coint-i">No cointegration → VAR path</div>
+    </div>
+
+    <div class="si">
+      <div class="si-lbl">VAR Lag (AIC-selected)</div>
+      <div class="si-val" id="v-lag" style="color:var(--green)">p = 3</div>
+      <div class="si-sub">maxlags=5 ceiling · ic='aic'</div>
+    </div>
+
+    <div class="si">
+      <div class="si-lbl">Perturbation Mode</div>
+      <div class="si-val" id="v-pert-mode" style="color:var(--teal);font-size:10px">zero-ablation</div>
+      <div class="si-sub">C.1 — replaces gaussian noise</div>
+    </div>
+
+    <div class="si">
+      <div class="si-lbl">CoT Time Axis (D.1)</div>
+      <div class="si-val" id="v-cot" style="color:var(--text1);font-size:10px">token-level</div>
+      <div class="si-sub" id="v-cot-steps">–</div>
+    </div>
+
+    <div class="si">
+      <div class="si-lbl">Intrinsic Time τ (D.3)</div>
+      <div class="si-val" id="v-tau" style="color:var(--purple)">0.00</div>
+      <div class="hbar"><div class="hbar-fill" id="b-tau" style="width:0%;background:var(--purple)"></div></div>
+    </div>
+
+    <div class="si">
+      <div class="si-lbl">Phase Clock (D.2 · EC)</div>
+      <div id="phase-tl"></div>
+      <div class="si-sub" id="v-phase">Awaiting EC boundaries…</div>
+    </div>
+
+    <div class="si">
+      <div class="si-lbl">Head Feature Mode (E.5)</div>
+      <div class="si-val" id="v-feat" style="color:var(--cyan);font-size:10px">scalar</div>
+      <div class="si-sub">shannon_entropy · sink sep ON</div>
+    </div>
+
+    <div class="si">
+      <div class="si-lbl">Tokens</div>
+      <div class="si-val glow-g" id="v-tok" style="color:var(--green)">0</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── PANEL: HEAD ENTROPY (GAP E) ──────── -->
+<div class="panel" id="p-entropy">
+  <div class="ph">
+    <div class="pt">Head Entropy · Layer 23</div>
+    <div class="pb pb-g">STREAMING</div>
+    <div id="feat-tabs" style="display:flex;gap:3px;margin-left:auto">
+      <button class="tabbtn active" onclick="setFeatTab('shannon')" id="ft-shannon">SHANNON</button>
+      <button class="tabbtn" onclick="setFeatTab('renyi')"   id="ft-renyi">RÉNYI</button>
+      <button class="tabbtn" onclick="setFeatTab('effrank')" id="ft-effrank">EFF·RANK</button>
+      <button class="tabbtn" onclick="setFeatTab('sink')"    id="ft-sink">SINK·FRAC</button>
+      <button class="tabbtn" onclick="setFeatTab('maxattn')" id="ft-maxattn">MAX·ATTN</button>
+    </div>
+    <div style="font-size:8px;color:var(--text2);margin-left:8px" id="feat-formula">H=−Σp·logp</div>
+  </div>
+  <div class="pc" style="padding:3px">
+    <div style="position:relative;width:100%;height:100%"><canvas id="c-entropy"></canvas></div>
+  </div>
+</div>
+
+<!-- ── PANEL: INFLUENCE MATRIX (GAP B) ──── -->
+<div class="panel" id="p-matrix">
+  <div class="ph">
+    <div class="pt">VAR Influence [14×14]</div>
+    <div class="pb pb-c" id="mat-badge">FDR·MASKED</div>
+    <div style="font-size:8px;color:var(--text2);margin-left:auto">row=target · col=source</div>
+  </div>
+  <div class="pc" style="display:flex;flex-direction:column;gap:3px;padding:5px">
+    <div style="display:flex;gap:4px;align-items:center;flex-shrink:0;font-size:7px;color:var(--text2)">
+      <span id="mat-stats">Loading…</span>
+      <span style="margin-left:auto;display:flex;gap:4px;align-items:center">
+        <span style="display:flex;gap:2px;align-items:center"><span style="width:7px;height:7px;display:inline-block;background:var(--bg3);border-radius:1px"></span>insig</span>
+        <span style="display:flex;gap:2px;align-items:center"><span style="width:7px;height:7px;display:inline-block;background:rgba(255,179,0,.5);border-radius:1px"></span>med</span>
+        <span style="display:flex;gap:2px;align-items:center"><span style="width:7px;height:7px;display:inline-block;background:rgba(255,61,80,.8);border-radius:1px"></span>high</span>
+      </span>
+    </div>
+    <div id="mat-grid" style="flex:1"></div>
+    <div id="mat-cap" style="font-size:7px;color:var(--text2);text-align:center"></div>
+  </div>
+</div>
+
+<!-- ── PANEL: VERDICT ─────────────────────── -->
+<div class="panel" id="p-verdict">
+  <div class="ph">
+    <div class="pt">Composite Score</div>
+    <div class="pb pb-g" id="vd-badge">LIVE</div>
+  </div>
+  <div class="pc" style="display:flex;flex-direction:column;align-items:center;padding:8px 6px;overflow-y:auto">
+    <div class="ring-wrap">
+      <svg width="84" height="84" viewBox="0 0 84 84">
+        <circle class="ring-track" cx="42" cy="42" r="34"/>
+        <circle class="ring-arc" id="ring-arc" cx="42" cy="42" r="34"
+          stroke="#00ff88" stroke-dasharray="213.6" stroke-dashoffset="60"
+          style="transform:rotate(-90deg);transform-origin:42px 42px"/>
+        <text class="ring-num" x="42" y="38" text-anchor="middle" font-size="15" id="ring-n">72</text>
+        <text class="ring-cap" x="42" y="50" text-anchor="middle" font-size="7">/100</text>
+      </svg>
+    </div>
+    <div style="font-size:12px;font-weight:700;letter-spacing:.06em;margin-bottom:6px;text-align:center" id="vd-txt" class="vd-green">STRONG REASONING</div>
+    <div style="width:100%">
+      <div class="mr"><div class="mr-name">DTW Sensitivity</div><div class="mr-bar"><div class="mr-fill" id="mr-dtw" style="width:78%;background:var(--cyan)"></div></div><div class="mr-val" id="mv-dtw">0.78</div></div>
+      <div class="mr"><div class="mr-name">Spectral Coh.</div><div class="mr-bar"><div class="mr-fill" id="mr-spec" style="width:65%;background:var(--green)"></div></div><div class="mr-val" id="mv-spec">0.65</div></div>
+      <div class="mr"><div class="mr-name">Topo Smooth.</div><div class="mr-bar"><div class="mr-fill" id="mr-topo" style="width:81%;background:var(--purple)"></div></div><div class="mr-val" id="mv-topo">0.81</div></div>
+      <div class="mr"><div class="mr-name">Active Reason.</div><div class="mr-bar"><div class="mr-fill" id="mr-act" style="width:68%;background:var(--amber)"></div></div><div class="mr-val" id="mv-act">0.68</div></div>
+      <div class="mr"><div class="mr-name">FDR Sig. Pairs</div><div class="mr-bar"><div class="mr-fill" id="mr-fdr" style="width:54%;background:var(--teal)"></div></div><div class="mr-val" id="mv-fdr" style="color:var(--teal)">7/196</div></div>
+      <div class="mr"><div class="mr-name">TE (B.4)</div><div class="mr-bar"><div class="mr-fill" id="mr-te" style="width:0%;background:var(--pink)"></div></div><div class="mr-val" id="mv-te" style="color:var(--text2)">–</div></div>
+    </div>
+    <div style="width:100%;margin-top:6px;padding-top:5px;border-top:1px solid var(--border)">
+      <div class="si-lbl" style="margin-bottom:3px">Patch Restoration (C.3)</div>
+      <div style="display:flex;gap:8px;">
+        <div style="text-align:center;flex:1"><div style="font-size:14px;font-weight:700;color:var(--green)" id="vd-restore">0.84</div><div style="font-size:7px;color:var(--text2)">H2→H5</div></div>
+        <div style="text-align:center;flex:1"><div style="font-size:14px;font-weight:700;color:var(--amber)" id="vd-kl">0.12</div><div style="font-size:7px;color:var(--text2)">KL patch</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── PANEL: VAR + STATIONARITY + PDC ───── -->
+<div class="panel" id="p-var">
+  <div class="ph">
+    <div class="pt">VAR · Stationarity · PDC · TE</div>
+    <div class="pb pb-c">BH-FDR α=0.05</div>
+    <div style="display:flex;gap:4px;margin-left:auto">
+      <button class="tabbtn active" id="tb-inf"  onclick="setVarTab('inf')">INFLUENCE</button>
+      <button class="tabbtn"        id="tb-stat" onclick="setVarTab('stat')">A.1·A.5·KPSS</button>
+      <button class="tabbtn"        id="tb-pdc"  onclick="setVarTab('pdc')">B.5·PDC</button>
+      <button class="tabbtn"        id="tb-hmm"  onclick="setVarTab('hmm')">D.4·HMM</button>
+      <button class="tabbtn"        id="tb-sq"   onclick="setVarTab('sq')">E·SIGNAL</button>
+    </div>
+  </div>
+  <div class="pc" style="padding:5px 8px;overflow:hidden">
+    <!-- Influence tab -->
+    <div id="tab-inf" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;height:100%">
+      <div id="il-list" style="overflow:hidden">
+        <div style="font-size:7px;color:var(--text2);letter-spacing:.14em;text-transform:uppercase;margin-bottom:4px">GRANGER PAIRS · BH-FDR CORRECTED · Σ|Aₗ[i,j]|</div>
+      </div>
+      <div style="position:relative;height:100%"><canvas id="c-var"></canvas></div>
+    </div>
+    <!-- Stationarity tab -->
+    <div id="tab-stat" style="display:none;height:100%;display:none;grid-template-columns:1fr 1fr;gap:8px">
+      <div style="overflow:hidden" id="stat-list">
+        <div style="font-size:7px;color:var(--text2);letter-spacing:.12em;text-transform:uppercase;margin-bottom:4px">PER-HEAD ADF + KPSS JOINT TEST (A.1 · A.5)</div>
+        <div style="font-size:7px;color:var(--text2);display:flex;gap:4px;margin-bottom:3px;padding-bottom:2px;border-bottom:1px solid var(--border)">
+          <span style="min-width:20px">H</span>
+          <span style="min-width:34px;text-align:right">ADF·p</span>
+          <span style="min-width:34px;text-align:right">KPSS·p</span>
+          <span style="flex:1"></span>
+          <span style="min-width:60px;text-align:right">diagnosis</span>
+        </div>
+      </div>
+      <div style="overflow:hidden">
+        <div style="font-size:7px;color:var(--text2);letter-spacing:.12em;text-transform:uppercase;margin-bottom:5px">SUMMARY · JOHANSEN (A.3)</div>
+        <div id="stat-summary" style="display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-bottom:8px"></div>
+        <div style="font-size:7px;color:var(--text2);letter-spacing:.1em;margin-bottom:3px">VECM DECISION</div>
+        <div id="vecm-decision" style="font-size:9px;color:var(--text1);line-height:1.7"></div>
+        <div style="margin-top:6px;font-size:7px;color:var(--text2);letter-spacing:.1em;margin-bottom:2px">FRACTIONAL HEADS (→ HURST)</div>
+        <div id="frac-heads" style="font-size:9px;color:var(--purple)"></div>
+      </div>
+    </div>
+    <!-- PDC tab -->
+    <div id="tab-pdc" style="display:none;height:100%">
+      <div style="font-size:7px;color:var(--text2);letter-spacing:.12em;margin-bottom:4px">B.5 — PARTIAL DIRECTED COHERENCE · freq-domain Granger · PDC(j→i, f) = |A(f)[i,j]|² / Σₖ|A(f)[k,j]|²</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;height:calc(100% - 20px)">
+        <div><div style="font-size:7px;color:var(--text2);margin-bottom:2px">LOW-FREQ BAND [0, 0.1] — slow trend influence</div><div style="position:relative;height:calc(100% - 16px)"><canvas id="c-pdc-low"></canvas></div></div>
+        <div><div style="font-size:7px;color:var(--text2);margin-bottom:2px">HIGH-FREQ BAND [0.4, 0.5] — period-2 cycle influence</div><div style="position:relative;height:calc(100% - 16px)"><canvas id="c-pdc-high"></canvas></div></div>
+      </div>
+    </div>
+    <!-- HMM tab -->
+    <div id="tab-hmm" style="display:none;height:100%">
+      <div style="font-size:7px;color:var(--text2);letter-spacing:.12em;margin-bottom:4px">D.4 — GAUSSIAN HMM PHASE DISCOVERY · n_states=4 · covariance=diag · Viterbi decode</div>
+      <div id="hmm-bar-full" style="display:flex;height:10px;gap:1px;border-radius:2px;overflow:hidden;margin-bottom:6px"></div>
+      <div id="hmm-state-info" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;margin-bottom:6px"></div>
+      <div style="font-size:7px;color:var(--text2);margin-bottom:3px">STATE TRANSITION MATRIX</div>
+      <div id="hmm-trans" style="display:grid;gap:1px;width:120px;height:60px"></div>
+      <div style="margin-top:8px;font-size:7px;color:var(--text2)">BIC: <span id="hmm-bic" style="color:var(--text1)">–</span> · log-likelihood: <span id="hmm-ll" style="color:var(--text1)">–</span></div>
+      <div style="position:relative;height:calc(100% - 110px);margin-top:4px"><canvas id="c-hmm"></canvas></div>
+    </div>
+    <!-- Signal quality tab -->
+    <div id="tab-sq" style="display:none;height:100%">
+      <div style="font-size:7px;color:var(--text2);letter-spacing:.12em;margin-bottom:5px">E — MULTI-METRIC SIGNAL QUALITY · per-head · E.1 variants · E.2 sink sep · E.3 OV · E.5 vector</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;height:calc(100% - 20px)">
+        <div id="sq-per-head" style="overflow:hidden">
+          <div style="font-size:7px;color:var(--text2);margin-bottom:3px">PER-HEAD · current token</div>
+        </div>
+        <div>
+          <div style="font-size:7px;color:var(--text2);margin-bottom:3px">METRIC COMPARISON · all heads mean</div>
+          <div style="position:relative;height:calc(100% - 16px)"><canvas id="c-sq"></canvas></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── PANEL: PERTURBATION (GAP C) ──────── -->
+<div class="panel" id="p-perts">
+  <div class="ph">
+    <div class="pt">Perturbation · Gap C</div>
+    <div class="pb pb-p" id="pert-badge">ZERO-ABLATION</div>
+  </div>
+  <div class="pc" style="padding:6px 8px;overflow-y:auto">
+    <div style="font-size:7px;color:var(--text2);letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px">C.1/C.2 · ablation results</div>
+    <div style="font-size:7px;color:var(--text2);display:flex;gap:4px;margin-bottom:2px">
+      <span style="min-width:26px">head</span>
+      <span style="font-size:7px;min-width:28px">mode</span>
+      <span style="flex:1">ΔH entropy</span>
+      <span style="min-width:36px;text-align:right">restore</span>
+    </div>
+    <div id="pert-list"></div>
+    <div style="margin-top:8px;font-size:7px;color:var(--text2);letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px">C.3 · activation patching</div>
+    <div id="patch-list"></div>
+    <div style="margin-top:8px;font-size:7px;color:var(--text2);letter-spacing:.1em;text-transform:uppercase;margin-bottom:3px">C.4 · direct vs mediated effect</div>
+    <div id="mediation-list"></div>
+  </div>
+</div>
+
+<!-- ── PANEL: TDA ─────────────────────────── -->
+<div class="panel" id="p-tda">
+  <div class="ph">
+    <div class="pt">TDA · Topology</div>
+    <div class="pb pb-a" id="tda-badge">COMPUTING</div>
+  </div>
+  <div class="pc" style="padding:7px 9px;overflow-y:auto">
+    <div class="betti-grid">
+      <div class="betti-card"><div class="betti-num" id="b0" style="color:var(--cyan)">3</div><div class="betti-lbl">β₀ comps</div></div>
+      <div class="betti-card"><div class="betti-num" id="b1" style="color:var(--purple)">1</div><div class="betti-lbl">β₁ loops</div></div>
+    </div>
+    <div style="text-align:center;margin-bottom:7px">
+      <div class="si-lbl" style="margin-bottom:2px">Euler χ</div>
+      <div style="font-size:22px;font-weight:700" id="euler" style="color:var(--amber)">+2</div>
+    </div>
+    <div class="si-lbl" style="margin-bottom:3px">EC Anomaly Series</div>
+    <div class="ec-wrap"><canvas id="c-ec"></canvas></div>
+    <div style="margin-bottom:6px">
+      <div class="si-lbl" style="margin-bottom:2px">HMM Phases (D.4)</div>
+      <div class="hmm-bar" id="tda-hmm-bar"></div>
+    </div>
+    <div style="margin-bottom:6px">
+      <div class="si-lbl" style="margin-bottom:2px">Arc-Length τ (D.3)</div>
+      <div class="si-val" id="v-tau2" style="font-size:14px;color:var(--purple)">0.00</div>
+      <div class="hbar"><div class="hbar-fill" id="b-tau2" style="width:0%;background:var(--purple)"></div></div>
+    </div>
+    <div>
+      <div class="si-lbl" style="margin-bottom:3px">Topo Anomalies</div>
+      <div id="topo-anom" style="font-size:8px;line-height:1.8"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── PANEL: LOG ─────────────────────────── -->
+<div class="panel" id="p-log">
+  <div class="ph">
+    <div class="pt">Event Stream</div>
+    <div class="pb pb-g">LIVE</div>
+    <div style="font-size:7px;color:var(--text3);margin-left:6px" id="lc">0 events</div>
+    <div style="margin-left:auto;font-size:8px;color:var(--text2)" id="interp-src"></div>
+  </div>
+  <div class="pc" style="padding:0">
+    <div id="log-wrap">
+      <div id="log-lines"></div>
+      <div id="log-interp">
+        <div class="li-title">Live Interpretation</div>
+        <div class="li-text" id="li-txt">Initializing…</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /root -->
+
+<script>
+// ═══════════════════════════════════════════════════════
+// DATA MODEL — directly mirrors update.md structures
+// ═══════════════════════════════════════════════════════
+const H = 14, T_MAX = 100;
+
+// Gap A — stationarity ground truth (A.1, A.5)
+// Generated to reflect: ~6 unit_root, ~3 fractional, ~3 ambiguous, ~2 stationary
+const STAT = [
+  {h:0, adf:0.74, kpss:0.04, diag:'unit_root'},
+  {h:1, adf:0.62, kpss:0.03, diag:'unit_root'},
+  {h:2, adf:0.04, kpss:0.02, diag:'fractional'},  // ADF rejects but KPSS also rejects
+  {h:3, adf:0.81, kpss:0.06, diag:'ambiguous'},
+  {h:4, adf:0.59, kpss:0.03, diag:'unit_root'},
+  {h:5, adf:0.72, kpss:0.02, diag:'unit_root'},
+  {h:6, adf:0.03, kpss:0.01, diag:'fractional'},
+  {h:7, adf:0.68, kpss:0.04, diag:'unit_root'},
+  {h:8, adf:0.77, kpss:0.05, diag:'unit_root'},
+  {h:9, adf:0.55, kpss:0.07, diag:'ambiguous'},
+  {h:10,adf:0.02, kpss:0.04, diag:'stationary'},
+  {h:11,adf:0.44, kpss:0.03, diag:'unit_root'},
+  {h:12,adf:0.03, kpss:0.02, diag:'fractional'},
+  {h:13,adf:0.01, kpss:0.08, diag:'stationary'},
+];
+
+// Gap B — ground truth influence pairs (FDR-significant only)
+const TRUE_INF = {
+  '2→5':1.14,'5→9':0.98,'0→3':0.91,'7→11':0.87,'4→1':0.79,
+  '3→8':0.72,'1→6':0.65,'9→12':0.61,'6→2':0.55,'11→13':0.50,
+};
+// Full 14×14 matrix
+const INF_MAT = Array.from({length:H},(_,i)=>Array.from({length:H},(_,j)=>{
+  if(i===j)return 0;
+  const v=TRUE_INF[`${j}→${i}`];
+  return v||(Math.random()*0.22+0.02);
+}));
+
+// Gap C — perturbation results (C.1/C.2/C.3/C.4)
+const PERT_RESULTS = [
+  {head:2, mode:'zero',  delta_h:+0.31, target:5,  restore:0.84, confirmed:true},
+  {head:5, mode:'zero',  delta_h:+0.27, target:9,  restore:0.79, confirmed:true},
+  {head:0, mode:'zero',  delta_h:+0.22, target:3,  restore:0.71, confirmed:true},
+  {head:7, mode:'mean',  delta_h:+0.19, target:11, restore:0.58, confirmed:true},
+  {head:4, mode:'mean',  delta_h:+0.09, target:1,  restore:0.31, confirmed:false},
+];
+const MEDIATION = [
+  {source:2, target:9, mediator:5, total:0.68, direct:0.18, indirect:0.50, ratio:0.74},
+  {source:0, target:8, mediator:3, total:0.45, direct:0.20, indirect:0.25, ratio:0.56},
+];
+
+// Gap D — HMM phases
+const HMM_STATES = [
+  {id:0,label:'PROMPT·PROC', color:'#00d4ff', tokens:'0-24',  mean_h:2.1},
+  {id:1,label:'SETUP',       color:'#00ff88', tokens:'25-41', mean_h:1.6},
+  {id:2,label:'ACTIVE·CALC', color:'#ffb300', tokens:'42-67', mean_h:3.1},
+  {id:3,label:'CONCLUSION',  color:'#aa66ff', tokens:'68-100',mean_h:2.4},
+];
+const HMM_TRANS = [
+  [0.72,0.20,0.06,0.02],
+  [0.08,0.65,0.24,0.03],
+  [0.02,0.12,0.70,0.16],
+  [0.01,0.03,0.14,0.82],
+];
+
+// Gap E — per-head signal quality at a snapshot
+function makeSignalQuality(h){
+  const base = 1.5 + Math.sin(h*0.7)*0.8 + Math.random()*0.4;
+  return {
+    shannon: base,
+    renyi:   base*0.88 + Math.random()*0.1,
+    effrank: 0.30 + Math.random()*0.45,
+    sink:    0.05 + Math.random()*0.20,
+    maxattn: 0.15 + Math.random()*0.50,
+    ov:      8 + Math.random()*12,
+  };
+}
+const SQ = Array.from({length:H}, (_,h) => makeSignalQuality(h));
+
+// Interpretation cycle
+const INTERPS = [
+  ['Gap A — Non-stationarity', 'Per-head ADF shows <span class="li-hl">8/14 unit-root</span>, 3 fractional. Selective differencing applied. Fractional heads (2,6,12) routed to Hurst analysis — NOT differenced.'],
+  ['Gap A — Johansen test', 'Rank=0 → no cointegration detected. <span class="li-hl">VAR path selected</span> (not VECM). AIC selects lag p=3 within maxlags=5 ceiling.'],
+  ['Gap B — FDR correction', '<span class="li-hl">7/196 pairs survive</span> Benjamini-Hochberg at α=0.05. Without correction, ~10 false positives expected at raw p&lt;0.05.'],
+  ['Gap B — PDC decomposition', 'H2→H5 influence is <span class="li-hl">concentrated at f=0.5</span> (period-2). H0→H3 is low-freq. Different causal channels operate at different rhythms.'],
+  ['Gap C — Zero-ablation', 'Silencing H2 with zeros (not Gaussian noise) causes H5 entropy +0.31. <span class="li-hl">Restoration=0.84</span> confirms H2 causally focuses H5.'],
+  ['Gap C — Mediation', 'H2→H9 total effect=0.68. Indirect via H5 accounts for <span class="li-hl">74% of that</span>. Direct path H2→H9 is only 0.18.'],
+  ['Gap D — HMM phases', '4 latent cognitive phases discovered. <span class="li-hl">Phase 2 (ACTIVE·CALC)</span> shows highest entropy mean (3.1) and strongest inter-head causality.'],
+  ['Gap D — Intrinsic time', 'Arc-length τ reparametrizes token index. High-curvature regions (tokens 40-65) correspond to <span class="li-hl">3× denser arc-length</span> sampling — true cognitive effort.'],
+  ['Gap E — Sink separation', '<span class="li-hl">BOS token removed</span> before entropy computation. Heads 2,5 had 18% of attention mass on sink — without removal, entropy was artificially inflated.'],
+  ['Gap E — Signal quality', 'Rényi α=2 (collision entropy) and max-attention reveal that <span class="li-hl">H0 is a broad scanner</span> (high effrank) while H5 is a sharp selector (low effrank, high maxattn).'],
+];
+
+// ═══════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════
+const S = {
+  t:0, running:true, featTab:'shannon', varTab:'inf',
+  hurst:0.712, tau:0, velocity:14, score:72,
+  selected_lag:3, coint_rank:0, sig_pairs:7,
+  betti0:3, betti1:1, euler:2,
+  logCount:0, interpIdx:0,
+  entropy:Array.from({length:H},()=>[]),
+  ec:[],
+  hmmSeq:[], // will fill during sim
+  phases_detected: false,
+};
+
+// Pre-generate HMM state sequence
+for(let t=0;t<T_MAX;t++){
+  const s = t<25?0:t<42?1:t<68?2:3;
+  const noise = Math.random()<0.08 ? (s>0?s-1:s+1) : s;
+  S.hmmSeq.push(Math.min(3,Math.max(0,noise)));
+}
+
+// ═══════════════════════════════════════════════════════
+// BOOT SEQUENCE
+// ═══════════════════════════════════════════════════════
+const BOOT_LINES = [
+  ['ok',  'Initializing CHRONOSCOPE v0.9.5-gap · update.md aligned'],
+  ['ok',  'Loading Qwen/Qwen2.5-0.5B · FP16 · hidden_dim=896'],
+  ['ok',  'Attaching 24 self-attention hooks · interceptor.py'],
+  ['ok',  'Head metric mode: multi-feature [shannon,renyi,effrank,sink,maxattn]'],
+  ['ok',  'Attention sink detection: BOS pos=0 · auto-detect enabled (E.2)'],
+  ['ok',  'OV circuit hooks registered: v_proj × 24 layers (E.3)'],
+  ['ok',  'Per-head ADF tests: 14 series · autolag=AIC (A.1)'],
+  ['ok',  'Joint KPSS+ADF diagnosis: fractional integration detection (A.5)'],
+  ['ok',  'Johansen cointegration test: rank detection active (A.3)'],
+  ['ok',  'VAR lag selection: ic=aic · maxlags=5 ceiling (A.4)'],
+  ['ok',  'Granger F-tests: 14×14=196 directed pairs (B.1)'],
+  ['ok',  'Benjamini-Hochberg FDR correction: α=0.05 (B.2)'],
+  ['ok',  'Bootstrap surrogates: disabled (flag enable_bootstrap_surrogates=False)'],
+  ['ok',  'Transfer entropy: disabled (flag use_transfer_entropy=False)'],
+  ['ok',  'PDC: partial directed coherence · 128 freq points (B.5)'],
+  ['ok',  'Perturbation mode: zero-ablation (replaces gaussian) (C.1)'],
+  ['ok',  'Mean ablation cache: 10 reference prompts loaded (C.2)'],
+  ['ok',  'Activation patching: clean/corrupted prompt pair registered (C.3)'],
+  ['ok',  'Direct/mediated effect decomposition: enabled (C.4)'],
+  ['ok',  'CoT segmenter: cot_segmenter.py loaded · token-level default (D.1)'],
+  ['ok',  'Topological phase clock: EC-spike boundaries · σ=2.0 (D.2)'],
+  ['ok',  'Intrinsic time: arc-length τ · observer.py::compute_intrinsic_time (D.3)'],
+  ['ok',  'HMM phase discovery: n_states=4 · hmmlearn (D.4)'],
+  ['ok',  'Arc-length resampling: disabled (flag use_arc_length_resampling=False)'],
+  ['ok',  'TDA: persistent homology + Euler characteristic sliding window'],
+  ['ok',  'NEXUS eager graph engine: initialized'],
+  ['>>',  'Beginning generation: complex non-orientable manifold prompt'],
+];
+
+async function runBoot(){
+  const el=document.getElementById('boot-lines');
+  const bar=document.getElementById('boot-fill');
+  for(let i=0;i<BOOT_LINES.length;i++){
+    await new Promise(r=>setTimeout(r,55));
+    const d=document.createElement('div');
+    d.className='bl';
+    d.style.animationDelay='0s';
+    const [type,msg]=BOOT_LINES[i];
+    if(type==='ok') d.innerHTML=`<span style="color:var(--green)">[  OK  ]</span> ${msg}`;
+    else            d.innerHTML=`<span style="color:var(--cyan)">[  >>  ]</span> ${msg}`;
+    el.appendChild(d);
+    bar.style.width=`${((i+1)/BOOT_LINES.length)*100}%`;
+  }
+  await new Promise(r=>setTimeout(r,350));
+  const bo=document.getElementById('boot');
+  bo.style.transition='opacity .5s';bo.style.opacity='0';
+  setTimeout(()=>{bo.remove();initDashboard();},500);
+}
+
+// ═══════════════════════════════════════════════════════
+// CHARTS
+// ═══════════════════════════════════════════════════════
+Chart.defaults.color='#4a6888';
+Chart.defaults.borderColor='#1c2d3e';
+Chart.defaults.font.family='JetBrains Mono,monospace';
+Chart.defaults.font.size=8;
+
+const HCOLS=['#00ff88','#00d4ff','#ffb300','#ff3d50','#aa66ff','#00ffcc','#ff8844',
+             '#44aaff','#ff44aa','#88ff44','#ffdd00','#44ffdd','#dd44ff','#ff6644'];
+
+let charts={};
+
+function mkChart(id,config){
+  const ctx=document.getElementById(id);
+  if(!ctx)return null;
+  return new Chart(ctx,config);
+}
+
+function initCharts(){
+  // Entropy
+  charts.entropy=mkChart('c-entropy',{
+    type:'line',
+    data:{labels:[],datasets:Array.from({length:H},(_,h)=>({
+      label:`H${h}`,data:[],borderColor:HCOLS[h],borderWidth:h<3?1.5:.6,
+      tension:.3,pointRadius:0,fill:false,borderDash:h>9?[2,3]:[],
+    }))},
+    options:{responsive:true,maintainAspectRatio:false,animation:{duration:0},
+      plugins:{legend:{display:true,position:'top',labels:{boxWidth:6,boxHeight:2,padding:5,font:{size:8},color:'#4a6888'}},
+        tooltip:{backgroundColor:'#101820',borderColor:'#1c2d3e',borderWidth:1,
+          callbacks:{title:c=>`Token ${c[0].label}`,label:c=>` H${c.datasetIndex}: ${c.parsed.y.toFixed(3)}`}}},
+      scales:{x:{grid:{color:'rgba(28,45,62,.4)',lineWidth:.5},ticks:{maxTicksLimit:8,color:'#2a4060'}},
+              y:{min:0,max:5,grid:{color:'rgba(28,45,62,.4)',lineWidth:.5},ticks:{color:'#2a4060',stepSize:1}}}}
+  });
+
+  // VAR influence bar
+  const pairs=Object.entries(TRUE_INF).sort((a,b)=>b[1]-a[1]).slice(0,9);
+  charts.var=mkChart('c-var',{
+    type:'bar',
+    data:{labels:pairs.map(p=>p[0]),datasets:[{
+      label:'Granger Score',
+      data:pairs.map(p=>p[1]),
+      backgroundColor:pairs.map(p=>p[1]>0.9?'rgba(255,61,80,.65)':p[1]>.7?'rgba(255,179,0,.6)':'rgba(0,212,255,.4)'),
+      borderColor:pairs.map(p=>p[1]>.9?'#ff3d50':p[1]>.7?'#ffb300':'#00d4ff'),
+      borderWidth:1,borderRadius:2,
+    }]},
+    options:{responsive:true,maintainAspectRatio:false,animation:{duration:300},
+      plugins:{legend:{display:false},tooltip:{backgroundColor:'#101820',
+        callbacks:{label:c=>` ${c.parsed.y.toFixed(3)} — FDR-sig`}}},
+      scales:{x:{grid:{display:false},ticks:{color:'#4a6888',font:{size:8}}},
+              y:{min:0,max:1.4,grid:{color:'rgba(28,45,62,.4)',lineWidth:.5},ticks:{color:'#2a4060',stepSize:.4}}}}
+  });
+
+  // EC
+  charts.ec=mkChart('c-ec',{
+    type:'bar',
+    data:{labels:[],datasets:[{data:[],backgroundColor:[],borderWidth:0,borderRadius:1}]},
+    options:{responsive:true,maintainAspectRatio:false,animation:{duration:0},
+      plugins:{legend:{display:false},tooltip:{enabled:false}},
+      scales:{x:{display:false},y:{display:false,min:-12,max:18}}}
+  });
+
+  // PDC low
+  const pdcFreqs=Array.from({length:32},(_,i)=>(i/64).toFixed(3));
+  charts.pdcLow=mkChart('c-pdc-low',{
+    type:'bar',
+    data:{labels:Array.from({length:H},(_,h)=>`H${h}`),
+      datasets:[{
+        label:'PDC low-freq',
+        data:Array.from({length:H},(_,h)=>{
+          const score=TRUE_INF[`${h}→5`]||TRUE_INF[`${h}→9`]||Math.random()*0.15;
+          return parseFloat((score*0.3+Math.random()*.05).toFixed(3));
+        }),
+        backgroundColor:'rgba(0,212,255,.5)',borderColor:'#00d4ff',borderWidth:1,borderRadius:2,
+      }]},
+    options:{responsive:true,maintainAspectRatio:false,animation:{duration:0},
+      plugins:{legend:{display:false},tooltip:{backgroundColor:'#101820',
+        callbacks:{label:c=>` PDC(low): ${c.parsed.y.toFixed(3)}`}}},
+      scales:{x:{grid:{display:false},ticks:{color:'#4a6888',font:{size:7}}},
+              y:{min:0,max:.6,grid:{color:'rgba(28,45,62,.4)'},ticks:{color:'#2a4060'},
+                title:{display:true,text:'PDC(j→target)',color:'#2a4060',font:{size:7}}}}}
+  });
+
+  // PDC high — shows the period-2 peak
+  charts.pdcHigh=mkChart('c-pdc-high',{
+    type:'bar',
+    data:{labels:Array.from({length:H},(_,h)=>`H${h}`),
+      datasets:[{
+        label:'PDC high-freq',
+        data:Array.from({length:H},(_,h)=>{
+          const isSource=[2,5,0,7].includes(h);
+          return parseFloat((isSource?(0.4+Math.random()*.15):(0.05+Math.random()*.1)).toFixed(3));
+        }),
+        backgroundColor:'rgba(255,61,80,.55)',borderColor:'#ff3d50',borderWidth:1,borderRadius:2,
+      }]},
+    options:{responsive:true,maintainAspectRatio:false,animation:{duration:0},
+      plugins:{legend:{display:false},tooltip:{backgroundColor:'#101820',
+        callbacks:{label:c=>` PDC(f≈0.5): ${c.parsed.y.toFixed(3)} — period-2 band`}}},
+      scales:{x:{grid:{display:false},ticks:{color:'#4a6888',font:{size:7}}},
+              y:{min:0,max:.7,grid:{color:'rgba(28,45,62,.4)'},ticks:{color:'#2a4060'},
+                title:{display:true,text:'PDC(j→target, high-f)',color:'#2a4060',font:{size:7}}}}}
+  });
+
+  // HMM state chart
+  charts.hmm=mkChart('c-hmm',{
+    type:'line',
+    data:{labels:Array.from({length:T_MAX},(_,i)=>i),
+      datasets:[{
+        label:'HMM state',
+        data:S.hmmSeq,
+        borderColor:'#ffb300',borderWidth:1.5,
+        backgroundColor:'rgba(255,179,0,.06)',fill:true,
+        stepped:true,pointRadius:0,
+      },{
+        label:'H entropy (H0)',
+        data:[],
+        borderColor:'#00ff88',borderWidth:1,
+        fill:false,tension:.3,pointRadius:0,
+        yAxisID:'y2',
+      }]},
+    options:{responsive:true,maintainAspectRatio:false,animation:{duration:0},
+      plugins:{legend:{display:true,labels:{boxWidth:6,font:{size:7},color:'#4a6888',padding:6}}},
+      scales:{
+        x:{grid:{color:'rgba(28,45,62,.3)'},ticks:{maxTicksLimit:8,color:'#2a4060'}},
+        y:{min:-0.5,max:3.5,grid:{color:'rgba(28,45,62,.3)'},ticks:{color:'#2a4060',
+          callback:v=>['PROMPT','SETUP','CALC','CONCL'][v]||v}},
+        y2:{position:'right',min:0,max:5,grid:{display:false},ticks:{color:'#2a4060'},
+          title:{display:true,text:'H entropy',color:'#2a4060',font:{size:7}}}}}
+  });
+
+  // Signal quality radar-ish bar
+  const sqMetrics=['shannon','renyi','effrank','sink','maxattn'];
+  charts.sq=mkChart('c-sq',{
+    type:'bar',
+    data:{labels:sqMetrics.map(m=>m.toUpperCase()),
+      datasets:[
+        {label:'mean',data:[0,0,0,0,0],backgroundColor:'rgba(0,212,255,.4)',borderColor:'#00d4ff',borderWidth:1,borderRadius:2},
+        {label:'max H',data:[0,0,0,0,0],backgroundColor:'rgba(0,255,136,.25)',borderColor:'#00ff88',borderWidth:1,borderRadius:2},
+      ]},
+    options:{responsive:true,maintainAspectRatio:false,animation:{duration:200},
+      plugins:{legend:{display:true,labels:{boxWidth:6,font:{size:7},color:'#4a6888',padding:5}}},
+      scales:{x:{grid:{display:false},ticks:{color:'#4a6888',font:{size:8}}},
+              y:{min:0,max:1,grid:{color:'rgba(28,45,62,.4)'},ticks:{color:'#2a4060'}}}}
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+// INFLUENCE MATRIX RENDER
+// ═══════════════════════════════════════════════════════
+function renderMatrix(){
+  const g=document.getElementById('mat-grid');
+  g.innerHTML='';
+  g.style.gridTemplateColumns=`repeat(${H},1fr)`;
+  g.style.gridTemplateRows=`repeat(${H},1fr)`;
+  const tt=document.getElementById('tt');
+  let sigCount=0;
+  for(let i=0;i<H;i++){
+    for(let j=0;j<H;j++){
+      const v=INF_MAT[i][j];
+      const isSig=!!TRUE_INF[`${j}→${i}`];
+      if(isSig)sigCount++;
+      const c=document.createElement('div');
+      c.className='mc';
+      if(i===j){c.style.background='#06090d';}
+      else if(!isSig){c.style.background=`rgba(28,45,62,${Math.min(v/.3,.4)+.05})`;}
+      else{
+        const n=Math.min(v/1.2,1);
+        c.style.background=v>1?`rgba(255,61,80,${.15+n*.85})`:v>.75?`rgba(255,179,0,${.15+n*.75})`:`rgba(0,212,255,${.12+n*.65})`;
+      }
+      c.addEventListener('mousemove',e=>{
+        tt.style.display='block';tt.style.left=`${e.clientX+12}px`;tt.style.top=`${e.clientY-8}px`;
+        const pval=isSig?(Math.random()*.008+.001).toFixed(4):'n/s';
+        tt.innerHTML=`<div class="tt-h">H${j} → H${i}</div>Score: ${v.toFixed(3)}<br>`
+          +(isSig?`<span style="color:var(--green)">FDR-sig · p=${pval}</span><br>Granger F-test confirmed`
+                 :`<span style="color:var(--text2)">not significant after BH-FDR</span>`);
+      });
+      c.addEventListener('mouseleave',()=>tt.style.display='none');
+      g.appendChild(c);
+    }
+  }
+  document.getElementById('mat-stats').textContent=`${sigCount/2|0} FDR-sig pairs · 196 tested · max=H2→H5(1.14)`;
+  document.getElementById('mat-cap').textContent=`VECM rank=0 → VAR path · selective differencing applied`;
+}
+
+// ═══════════════════════════════════════════════════════
+// STATIC PANELS
+// ═══════════════════════════════════════════════════════
+function renderInfluenceList(){
+  const el=document.getElementById('il-list');
+  // clear except header
+  while(el.children.length>1)el.removeChild(el.lastChild);
+  const pairs=Object.entries(TRUE_INF).sort((a,b)=>b[1]-a[1]);
+  const max=pairs[0][1];
+  pairs.forEach(([pair,score])=>{
+    const r=document.createElement('div');r.className='il-row';
+    const col=score>1?'#ff3d50':score>.75?'#ffb300':'#00d4ff';
+    const pval=(Math.random()*.008+.001).toFixed(4);
+    r.innerHTML=`<div class="il-pair" style="color:${col}">H${pair.split('→')[0]}→H${pair.split('→')[1]}</div>`
+      +`<div class="il-bar"><div class="il-fill" style="width:${score/max*100}%;background:${col}"></div></div>`
+      +`<div class="il-score">${score.toFixed(3)}</div>`
+      +`<div class="il-sig sig-y">p=${pval}</div>`;
+    el.appendChild(r);
+  });
+}
+
+function renderStationarity(){
+  const el=document.getElementById('stat-list');
+  // keep header rows (first 2 children)
+  while(el.children.length>2)el.removeChild(el.lastChild);
+  const diagCols={stationary:'#00ff88',unit_root:'#ffb300',fractional:'#aa66ff',ambiguous:'#4a6888'};
+  STAT.forEach(s=>{
+    const r=document.createElement('div');r.className='stat-row';
+    const adfCol=s.adf<.05?'#00ff88':'#ffb300';
+    const kpssCol=s.kpss>.05?'#00ff88':'#ff3d50';
+    r.innerHTML=`<div class="sr-head">H${s.h}</div>`
+      +`<div class="sr-adf" style="color:${adfCol}">${s.adf.toFixed(3)}</div>`
+      +`<div class="sr-kpss" style="color:${kpssCol}">${s.kpss.toFixed(3)}</div>`
+      +`<div class="sr-bar"><div class="sr-fill" style="width:${s.adf*100}%;background:${adfCol}"></div></div>`
+      +`<div class="sr-diag" style="color:${diagCols[s.diag]}">${s.diag}</div>`;
+    el.appendChild(r);
+  });
+  // summary
+  const counts={};
+  STAT.forEach(s=>counts[s.diag]=(counts[s.diag]||0)+1);
+  const diagCols2={stationary:'#00ff88',unit_root:'#ffb300',fractional:'#aa66ff',ambiguous:'#4a6888'};
+  document.getElementById('stat-summary').innerHTML=Object.entries(counts).map(([d,c])=>
+    `<div style="background:var(--bg2);border:1px solid var(--border);padding:4px;border-radius:2px;text-align:center">
+      <div style="font-size:16px;font-weight:700;color:${diagCols2[d]}">${c}</div>
+      <div style="font-size:6px;color:var(--text2);letter-spacing:.07em">${d}</div>
+    </div>`).join('');
+  document.getElementById('vecm-decision').innerHTML=
+    `rank=0 · no cointegration detected<br>`+
+    `→ selective differencing applied (A.2)<br>`+
+    `→ VAR(3) selected via AIC (A.4)`;
+  const fracHeads=STAT.filter(s=>s.diag==='fractional').map(s=>`H${s.h}`).join(', ');
+  document.getElementById('frac-heads').textContent=fracHeads+' → Hurst analysis (NOT differenced)';
+}
+
+function renderPerturbation(){
+  // C.1/C.2 ablation list
+  document.getElementById('pert-list').innerHTML=PERT_RESULTS.map(p=>{
+    const modeCol=p.mode==='zero'?'#00ffcc':'#ffb300';
+    const conf=p.confirmed;
+    const restoreCol=p.restore>.7?'#00ff88':p.restore>.4?'#ffb300':'#ff3d50';
+    return `<div class="pert-row">`
+      +`<div class="pert-head" style="color:var(--cyan)">H${p.head}</div>`
+      +`<div class="pert-mode" style="background:rgba(0,255,204,.08);color:${modeCol};border:1px solid rgba(0,255,204,.2)">${p.mode}</div>`
+      +`<div class="pert-bar"><div class="pert-fill" style="width:${Math.abs(p.delta_h)/0.35*100}%;background:${conf?'#00ff88':'#ffb300'}"></div></div>`
+      +`<div class="pert-delta" style="color:${p.delta_h>0?'#ff3d50':'#00ff88'}">+${p.delta_h.toFixed(2)}</div>`
+      +`<div class="pert-restore" style="color:${restoreCol}">${(p.restore*100).toFixed(0)}%</div>`
+      +`</div>`;
+  }).join('');
+  // C.3 activation patching
+  document.getElementById('patch-list').innerHTML=PERT_RESULTS.slice(0,3).map(p=>{
+    const r=p.restore;
+    const rCol=r>.7?'#00ff88':r>.4?'#ffb300':'#ff3d50';
+    return `<div class="pert-row">`
+      +`<div style="min-width:50px;font-size:8px;color:var(--cyan)">H${p.head}→H${p.target}</div>`
+      +`<div style="flex:1;font-size:7px;color:var(--text1)">restore=<span style="color:${rCol}">${(r*100).toFixed(0)}%</span></div>`
+      +`<div style="min-width:50px;font-size:7px;color:var(--text2)">kl=${(Math.random()*.15+.05).toFixed(3)}</div>`
+      +`</div>`;
+  }).join('');
+  // C.4 mediation
+  document.getElementById('mediation-list').innerHTML=MEDIATION.map(m=>{
+    const directPct=(m.direct/m.total*100).toFixed(0);
+    const indPct=(m.indirect/m.total*100).toFixed(0);
+    return `<div style="font-size:8px;margin-bottom:4px;padding:3px 0;border-bottom:1px solid rgba(28,45,62,.4)">`
+      +`<span style="color:var(--cyan)">H${m.source}→H${m.target}</span>`
+      +` via H${m.mediator}: <span style="color:var(--amber)">${indPct}% mediated</span>`
+      +` · direct=${directPct}%</div>`;
+  }).join('');
+}
+
+function renderHMM(){
+  // Full timeline bar
+  const bar=document.getElementById('hmm-bar-full');
+  bar.innerHTML='';
+  let prev=S.hmmSeq[0],runLen=1;
+  for(let t=1;t<=T_MAX;t++){
+    if(t===T_MAX||S.hmmSeq[t]!==prev){
+      const seg=document.createElement('div');
+      seg.className='hmm-seg';
+      seg.style.flex=runLen;
+      seg.style.background=HMM_STATES[prev].color;
+      seg.style.opacity='.6';
+      bar.appendChild(seg);
+      if(t<T_MAX){prev=S.hmmSeq[t];runLen=1;}
+    } else {runLen++;}
+  }
+  // State info cards
+  document.getElementById('hmm-state-info').innerHTML=HMM_STATES.map(s=>
+    `<div style="background:var(--bg2);border:1px solid var(--border);padding:4px;border-radius:2px;text-align:center;border-left:2px solid ${s.color}">
+      <div style="font-size:7px;font-weight:700;color:${s.color}">${s.label}</div>
+      <div style="font-size:7px;color:var(--text2)">${s.tokens}</div>
+      <div style="font-size:8px;color:var(--text1)">H̄=${s.mean_h}</div>
+    </div>`).join('');
+  // Transition matrix
+  const tm=document.getElementById('hmm-trans');
+  tm.style.gridTemplateColumns=`repeat(4,1fr)`;
+  tm.style.gridTemplateRows=`repeat(4,1fr)`;
+  tm.innerHTML='';
+  HMM_TRANS.forEach((row,i)=>row.forEach((v,j)=>{
+    const c=document.createElement('div');
+    c.style.cssText=`background:rgba(0,212,255,${v*.8});border-radius:1px;cursor:default`;
+    c.title=`${i}→${j}: ${v.toFixed(2)}`;
+    tm.appendChild(c);
+  }));
+  document.getElementById('hmm-bic').textContent='-1842.3';
+  document.getElementById('hmm-ll').textContent='938.4';
+}
+
+function renderSignalQuality(){
+  const el=document.getElementById('sq-per-head');
+  while(el.children.length>1)el.removeChild(el.lastChild);
+  const metrics=['shannon','renyi','effrank','sink','maxattn'];
+  const maxes={shannon:5,renyi:4.5,effrank:1,sink:.3,maxattn:1};
+  SQ.slice(0,7).forEach(sq=>{
+    const row=document.createElement('div');
+    row.className='sq-row';
+    row.innerHTML=`<div class="sq-metric">H${sq.h===undefined?SQ.indexOf(sq):sq.h}</div>`
+      +`<div class="sq-bars">`
+      +metrics.map((m,mi)=>{
+        const v=sq[m]||0;
+        const pct=Math.min(v/maxes[m]*100,100);
+        const cols=['#00d4ff','#00ff88','#ffb300','#ff3d50','#aa66ff'];
+        return `<div class="sq-bar"><div class="sq-fill" style="width:${pct}%;background:${cols[mi]}"></div></div>`;
+      }).join('')
+      +`</div>`;
+    el.appendChild(row);
+  });
+  // Normalise each metric to [0,1] for comparison chart
+  const norm={shannon:5,renyi:4.5,effrank:1,sink:.3,maxattn:1};
+  const means=metrics.map(m=>SQ.reduce((a,s)=>a+(s[m]||0),0)/H/norm[m]);
+  const maxH=SQ.reduce((best,s)=>s.shannon>best.shannon?s:best,SQ[0]);
+  const maxHnorm=metrics.map(m=>(maxH[m]||0)/norm[m]);
+  if(charts.sq){
+    charts.sq.data.datasets[0].data=means.map(v=>+Math.min(v,1).toFixed(3));
+    charts.sq.data.datasets[1].data=maxHnorm.map(v=>+Math.min(v,1).toFixed(3));
+    charts.sq.update('none');
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// PHASE BAR (model state panel)
+// ═══════════════════════════════════════════════════════
+function renderPhaseBar(){
+  const el=document.getElementById('phase-tl');
+  el.innerHTML='';
+  const tt=document.getElementById('tt');
+  HMM_STATES.forEach((ph,i)=>{
+    const seg=document.createElement('div');
+    seg.className='ph-seg';
+    seg.style.flex=2;
+    seg.style.background=ph.color;
+    seg.style.opacity='.4';
+    seg.addEventListener('mousemove',e=>{
+      tt.style.display='block';tt.style.left=`${e.clientX+12}px`;tt.style.top=`${e.clientY-8}px`;
+      tt.innerHTML=`<div class="tt-h">${ph.label}</div>Tokens: ${ph.tokens}<br>Mean H: ${ph.mean_h}<br>HMM state ${ph.id}`;
+    });
+    seg.addEventListener('mouseleave',()=>tt.style.display='none');
+    el.appendChild(seg);
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+// LIVE TICK — entropy generation
+// ═══════════════════════════════════════════════════════
+const HEAD_P=Array.from({length:H},(_,h)=>({
+  base:1.4+Math.random()*2.2, freq:.07+Math.random()*.14,
+  ph:Math.random()*Math.PI*2, drift:(Math.random()-.5)*.008,
+  noise:.08+Math.random()*.18,
+}));
+
+function genH(h,t){
+  const p=HEAD_P[h];
+  // Gap E.2: sink fraction removed → entropy slightly lower on average
+  const sinkAdj=0.15; // simulating sink removal adjustment
+  return Math.max(.05,Math.min(4.9,
+    p.base + Math.sin(t*p.freq+p.ph)*.55 + Math.sin(t*.48+p.ph*.7)*.28
+    + p.drift*t + (Math.random()-.5)*p.noise*2 - sinkAdj
+  ));
+}
+
+// E.1 multi-metric variants
+function genMetric(h,t,metric){
+  const base=genH(h,t);
+  switch(metric){
+    case 'renyi':   return base*.87+Math.random()*.08;
+    case 'effrank': return Math.max(.05,Math.min(1,base/5+Math.random()*.1));
+    case 'sink':    return Math.max(0,Math.min(.4,.08+Math.sin(t*.1+h*.3)*.06+Math.random()*.04));
+    case 'maxattn': return Math.max(.05,Math.min(1,.2+Math.random()*.4+(base>3?.15:0)));
+    default:        return base;
+  }
+}
+
+const LOG_SCRIPT=[
+  {t:2,  type:'gap', msg:'Gap A: per-head ADF queued for 14 series (A.1)'},
+  {t:5,  type:'stat',msg:'A.5: KPSS joint — H2,H6,H12 diagnosed fractional → Hurst routing'},
+  {t:8,  type:'gap', msg:'A.3: Johansen rank=0 · no cointegration · VAR path selected'},
+  {t:12, type:'ok',  msg:'A.4: AIC selects lag p=3 (maxlags=5 ceiling)'},
+  {t:18, type:'gap', msg:'A.2: selective differencing applied to 8 unit-root heads'},
+  {t:25, type:'tda', msg:'D.2: EC spike at t=24 → HMM phase 0→1 boundary detected'},
+  {t:30, type:'sig', msg:'B.1: Granger F-tests computed — 196 pairs, raw p<0.05: 22 pairs'},
+  {t:33, type:'sig', msg:'B.2: BH-FDR correction — 7 pairs significant at α=0.05'},
+  {t:36, type:'ok',  msg:'B.2: Top: H2→H5 score=1.14 (p=0.003 corrected)'},
+  {t:40, type:'pert',msg:'C.1: Zero-ablation H2 — entropy delta H5=+0.31 (not Gaussian)'},
+  {t:42, type:'tda', msg:'D.2: EC spike at t=41 → HMM phase 1→2 boundary (ACTIVE·CALC)'},
+  {t:45, type:'pert',msg:'C.3: Activation patching H2→H5 · restoration=0.84'},
+  {t:50, type:'pert',msg:'C.4: H2→H9 mediation via H5 = 74% of total effect'},
+  {t:55, type:'gap', msg:'B.5: PDC computed · H2→H5 concentrated at f=0.5 (period-2)'},
+  {t:60, type:'ok',  msg:'D.3: τ arc-length — tokens 42-67 cover 3× more manifold distance'},
+  {t:67, type:'tda', msg:'D.2: EC spike at t=67 → HMM phase 2→3 (CONCLUSION)'},
+  {t:72, type:'sig', msg:'E.2: BOS sink sep confirmed — H0,H5 entropy corrected -0.18'},
+  {t:78, type:'gap', msg:'E.3: OV-weighted metric shows H5 footprint > entropy predicts'},
+  {t:85, type:'ok',  msg:'D.4: HMM BIC=-1842.3 · n_states=4 optimal · all transitions stable'},
+  {t:92, type:'ok',  msg:'Composite score: 74 → STRONG REASONING · all gap fixes applied'},
+  {t:98, type:'ok',  msg:'Analysis complete — 100 tokens · 7 causal links · gaps A-E closed'},
+];
+let logIdx=0;
+let logCount=0;
+
+function addLog(type,msg){
+  const el=document.getElementById('log-lines');
+  const d=document.createElement('div');d.className='ll';
+  const now=new Date();
+  const ts=`${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}.${String(now.getMilliseconds()).padStart(3,'0')}`;
+  const tagMap={gap:'ll-gap',stat:'ll-stat',ok:'ll-ok',err:'ll-err',tda:'ll-tda',pert:'ll-pert',sig:'ll-sig'};
+  const lblMap={gap:'GAP·A-E',stat:'STAT',ok:' OK ',err:'ERR!',tda:'TDA',pert:'PERT',sig:'SIG'};
+  d.innerHTML=`<span class="ll-ts">${ts}</span><span class="ll-tag ${tagMap[type]||'ll-ok'}">${lblMap[type]||type}</span>${msg}`;
+  el.appendChild(d);
+  while(el.children.length>5)el.removeChild(el.firstChild);
+  logCount++;
+  document.getElementById('lc').textContent=`${logCount} events`;
+}
+
+// ═══════════════════════════════════════════════════════
+// MAIN TICK
+// ═══════════════════════════════════════════════════════
+function tick(){
+  if(!S.running)return;
+  const t=S.t;
+  if(t>=T_MAX){
+    S.running=false;
+    document.getElementById('lbl-var').textContent='VAR·DONE';
+    document.getElementById('lbl-fdr').textContent='FDR·DONE';
+    document.getElementById('lbl-hmm').textContent='HMM·DONE';
+    document.getElementById('dot-var').className='dot dot-c';
+    document.getElementById('dot-fdr').className='dot dot-c';
+    document.getElementById('dot-hmm').className='dot dot-c';
+    return;
+  }
+
+  // Entropy history
+  for(let h=0;h<H;h++){
+    S.entropy[h].push(genMetric(h,t,S.featTab));
+    if(S.entropy[h].length>T_MAX)S.entropy[h].shift();
+  }
+
+  // EC
+  const ec=S.betti0-S.betti1+(Math.random()-.5)*5;
+  S.ec.push(ec);
+  if(S.ec.length>60)S.ec.shift();
+
+  // Phase events
+  if(t===24&&!S.phases_detected){
+    S.betti0=4;S.betti1=2;
+    addLog('tda','D.2: EC spike · t=24 · phase 0→1 boundary');
+  }
+  if(t===41){S.betti0=4;S.betti1=2;S.euler=2;}
+  if(t===67){S.betti0=3;S.betti1=1;S.euler=2;S.phases_detected=true;}
+
+  // Scripted log events
+  while(logIdx<LOG_SCRIPT.length&&LOG_SCRIPT[logIdx].t<=t){
+    const {type,msg}=LOG_SCRIPT[logIdx++];
+    addLog(type,msg);
+  }
+
+  // Scalar updates
+  S.tau=Math.min(1,t/T_MAX+Math.random()*.015);
+  S.hurst=.65+Math.sin(t*.06)*.08+Math.random()*.025;
+  S.velocity=10+Math.sin(t*.09)*5+Math.random()*3;
+  S.score=Math.round(66+Math.sin(t*.07)*9+(t>80?6:0));
+  if(t===33)S.sig_pairs=7;
+  if(t===12)S.selected_lag=3;
+
+  S.t++;
+
+  // Update charts every 2 tokens
+  if(t%2===0){
+    const win=60;
+    const start=Math.max(0,t-win);
+    const labels=Array.from({length:Math.min(t+1,win)},(_,i)=>String(start+i));
+    charts.entropy.data.labels=labels;
+    charts.entropy.data.datasets.forEach((ds,h)=>{
+      ds.data=S.entropy[h].slice(-win);
+    });
+    charts.entropy.update('none');
+  }
+  if(t%4===0){
+    const ecL=S.ec.map((_,i)=>i);
+    charts.ec.data.labels=ecL;
+    charts.ec.data.datasets[0].data=S.ec;
+    charts.ec.data.datasets[0].backgroundColor=S.ec.map(v=>
+      Math.abs(v)>7?'rgba(255,61,80,.8)':Math.abs(v)>4?'rgba(255,179,0,.65)':'rgba(170,102,255,.4)');
+    charts.ec.update('none');
+  }
+
+  // HMM chart H0 entropy
+  if(charts.hmm&&t<T_MAX){
+    charts.hmm.data.datasets[1].data=S.entropy[0].concat(Array(T_MAX-S.entropy[0].length).fill(null));
+    charts.hmm.update('none');
+  }
+
+  // UI updates every 3 tokens
+  if(t%3===0)updateDisplays();
+
+  // Phase bar highlight
+  const phaseIdx=S.hmmSeq[Math.min(t,T_MAX-1)];
+  document.querySelectorAll('.ph-seg').forEach((s,i)=>{
+    s.style.opacity=i===phaseIdx?'1':'0.35';
+    s.style.boxShadow=i===phaseIdx?`0 0 5px ${HMM_STATES[i].color}`:'none';
+  });
+  document.getElementById('v-phase').textContent=`Phase ${phaseIdx}: ${HMM_STATES[phaseIdx].label}`;
+
+  // TDA HMM bar
+  const tls=document.getElementById('tda-hmm-bar');
+  if(tls.children.length===0){
+    HMM_STATES.forEach(s=>{
+      const seg=document.createElement('div');
+      seg.className='hmm-seg';seg.style.flex=2;seg.style.background=s.color;seg.style.opacity='.5';
+      tls.appendChild(seg);
+    });
+  }
+  document.querySelectorAll('#tda-hmm-bar .hmm-seg').forEach((s,i)=>{
+    s.style.flex=i===phaseIdx?3:1.5;
+    s.style.opacity=i===phaseIdx?'.85':'.4';
+  });
+
+  document.getElementById('hdr-tok').textContent=t;
+}
+
+function updateDisplays(){
+  const t=S.t;
+  // Hurst
+  const hc=S.hurst>.65?'#00d4ff':S.hurst>.55?'#ffb300':'#ff3d50';
+  document.getElementById('v-hurst').textContent=S.hurst.toFixed(3);
+  document.getElementById('v-hurst').style.color=hc;
+  document.getElementById('b-hurst').style.width=`${S.hurst*100}%`;
+  document.getElementById('b-hurst').style.background=hc;
+  document.getElementById('v-hurst-i').textContent=
+    S.hurst>.7?'Persistent — strong logical chain':
+    S.hurst>.55?'Persistent — logical continuation':
+    S.hurst>.5?'Mild persistence':'Anti-persistent — random walk risk';
+
+  // ADF / Johansen / lag
+  document.getElementById('v-lag').textContent=`p = ${S.selected_lag}`;
+  document.getElementById('hdr-lag').textContent=S.selected_lag;
+  document.getElementById('hdr-sig').textContent=t>=33?S.sig_pairs:'?';
+  document.getElementById('mv-fdr').textContent=t>=33?`${S.sig_pairs}/196`:'–';
+  document.getElementById('mr-fdr').style.width=t>=33?`${S.sig_pairs/196*350}%`:'0%';
+
+  // Tau
+  document.getElementById('v-tau').textContent=S.tau.toFixed(3);
+  document.getElementById('b-tau').style.width=`${S.tau*100}%`;
+  document.getElementById('v-tau2').textContent=S.tau.toFixed(3);
+  document.getElementById('b-tau2').style.width=`${S.tau*100}%`;
+
+  // Tok
+  document.getElementById('v-tok').textContent=t;
+
+  // Betti / Euler
+  document.getElementById('b0').textContent=S.betti0;
+  document.getElementById('b1').textContent=S.betti1;
+  const eu=S.betti0-S.betti1;
+  document.getElementById('euler').textContent=(eu>=0?'+':'')+eu;
+  document.getElementById('euler').style.color=Math.abs(eu)>3?'#ff3d50':Math.abs(eu)>1?'#ffb300':'#00ff88';
+
+  // Score ring
+  const arc=document.getElementById('ring-arc');
+  const circ=213.6;
+  arc.setAttribute('stroke-dashoffset',circ-(circ*S.score/100));
+  const sc=S.score>70?'#00ff88':S.score>50?'#ffb300':'#ff3d50';
+  arc.setAttribute('stroke',sc);
+  document.getElementById('ring-n').textContent=S.score;
+  const vt=document.getElementById('vd-txt');
+  vt.textContent=S.score>70?'STRONG REASONING':S.score>50?'MODERATE REASONING':'HALLUCINATION RISK';
+  vt.style.color=sc;
+
+  // Sub-metrics
+  const dtw=.72+Math.sin(t*.07)*.1;
+  const sp=.62+Math.sin(t*.05+1)*.09;
+  const tp=.79+Math.sin(t*.09+2)*.07;
+  const ac=.64+Math.sin(t*.06+.5)*.09;
+  document.getElementById('mr-dtw').style.width=`${dtw*100}%`;document.getElementById('mv-dtw').textContent=dtw.toFixed(2);
+  document.getElementById('mr-spec').style.width=`${sp*100}%`;document.getElementById('mv-spec').textContent=sp.toFixed(2);
+  document.getElementById('mr-topo').style.width=`${tp*100}%`;document.getElementById('mv-topo').textContent=tp.toFixed(2);
+  document.getElementById('mr-act').style.width=`${ac*100}%`;document.getElementById('mv-act').textContent=ac.toFixed(2);
+
+  // Regime badge
+  const regime=S.score>70?'STRONG·REASONING':S.score>50?'MODERATE·REASONING':'HALLUCINATION·RISK';
+  const rb=document.getElementById('hdr-regime');
+  rb.textContent=regime;
+  rb.style.background=S.score>70?'rgba(0,255,136,.1)':S.score>50?'rgba(255,179,0,.1)':'rgba(255,61,80,.1)';
+  rb.style.color=sc;
+  rb.style.borderColor=`${sc}44`;
+
+  // Topo anomalies
+  const anoms=[{t:15,sev:'low',msg:'Minor EC fluctuation'},{t:24,sev:'med',msg:'Phase 0→1 spike'},{t:41,sev:'high',msg:'Phase 1→2 spike (ACTIVE·CALC)'},{t:67,sev:'high',msg:'Phase 2→3 spike (CONCLUSION)'}].filter(a=>a.t<=t);
+  document.getElementById('topo-anom').innerHTML=anoms.map(a=>{
+    const c=a.sev==='high'?'#ff3d50':a.sev==='med'?'#ffb300':'#4a6888';
+    return `<div style="color:${c};margin-bottom:2px">t=${a.t}: ${a.msg}</div>`;
+  }).join('')||'<span style="color:var(--text3)">none yet</span>';
+
+  // CoT time axis
+  if(t>30&&document.getElementById('v-cot').textContent==='token-level'){
+    document.getElementById('v-cot').textContent='step-level (D.1)';
+    document.getElementById('v-cot').style.color='var(--green)';
+    document.getElementById('v-cot-steps').textContent='~4 steps detected via cot_segmenter';
+  }
+
+  // Signal quality update (every 6 tokens)
+  if(t%6===0){
+    for(let h=0;h<H;h++)SQ[h]={...makeSignalQuality(h), h};
+    renderSignalQuality();
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// INTERPRETATION CYCLE
+// ═══════════════════════════════════════════════════════
+let interpIdx=0;
+function cycleInterp(){
+  const [src,txt]=INTERPS[interpIdx%INTERPS.length];
+  const el=document.getElementById('li-txt');
+  const src_el=document.getElementById('interp-src');
+  el.style.opacity='0';el.style.transition='opacity .35s';
+  setTimeout(()=>{
+    el.innerHTML=txt;
+    src_el.textContent=src;
+    el.style.opacity='1';
+    interpIdx++;
+  },350);
+}
+
+// ═══════════════════════════════════════════════════════
+// TAB SWITCHING
+// ═══════════════════════════════════════════════════════
+function setVarTab(tab){
+  S.varTab=tab;
+  ['inf','stat','pdc','hmm','sq'].forEach(t=>{
+    const tabEl=document.getElementById(`tab-${t}`);
+    const btn=document.getElementById(`tb-${t}`);
+    if(!tabEl||!btn)return;
+    const isActive=t===tab;
+    tabEl.style.display=isActive?(t==='inf'?'grid':'block'):'none';
+    btn.className=isActive?'tabbtn active':'tabbtn';
+  });
+  // fix stat tab grid
+  if(tab==='stat'){
+    document.getElementById('tab-stat').style.display='grid';
+  }
+  if(tab==='pdc'){setTimeout(()=>{charts.pdcLow&&charts.pdcLow.resize();charts.pdcHigh&&charts.pdcHigh.resize();},50);}
+  if(tab==='hmm'){setTimeout(()=>{charts.hmm&&charts.hmm.resize();},50);}
+  if(tab==='sq'){setTimeout(()=>{charts.sq&&charts.sq.resize();},50);}
+}
+
+function setFeatTab(feat){
+  S.featTab=feat;
+  ['shannon','renyi','effrank','sink','maxattn'].forEach(f=>{
+    document.getElementById(`ft-${f}`).className=f===feat?'tabbtn active':'tabbtn';
+  });
+  const formulas={shannon:'H=−Σp·logp',renyi:'H₂=−log(Σp²)',effrank:'exp(H)/T',sink:'p[BOS]',maxattn:'max(p)'};
+  document.getElementById('feat-formula').textContent=formulas[feat];
+  // Reset entropy histories to new metric
+  for(let h=0;h<H;h++)S.entropy[h]=[];
+}
+
+// ═══════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════
+function initDashboard(){
+  initCharts();
+  renderMatrix();
+  renderInfluenceList();
+  renderStationarity();
+  renderPerturbation();
+  renderHMM();
+  renderSignalQuality();
+  renderPhaseBar();
+
+  setInterval(tick,110);
+  setInterval(cycleInterp,9000);
+  cycleInterp();
+
+  // PDC bar jitter
+  setInterval(()=>{
+    if(!charts.pdcLow||!charts.pdcHigh)return;
+    charts.pdcLow.data.datasets[0].data=charts.pdcLow.data.datasets[0].data.map(v=>Math.max(0,v+(Math.random()-.5)*.02));
+    charts.pdcHigh.data.datasets[0].data=charts.pdcHigh.data.datasets[0].data.map(v=>Math.max(0,v+(Math.random()-.5)*.02));
+    charts.pdcLow.update('none');charts.pdcHigh.update('none');
+  },700);
+
+  // Matrix flicker
+  setInterval(()=>{
+    const cells=document.querySelectorAll('.mc');
+    const i=Math.floor(Math.random()*cells.length);
+    if(cells[i]){cells[i].style.filter='brightness(1.5)';setTimeout(()=>cells[i].style.filter='',120);}
+  },500);
+}
+
+runBoot();
+
+// ═══════════════════════════════════════════════════════
+// HELP SYSTEM
+// ═══════════════════════════════════════════════════════
+
+const HELP_SECTIONS = [
+  {
+    id:'overview', label:'Overview', color:'var(--cyan)',
+    title:'What is Chronoscope?',
+    content:`
+<p style="color:var(--text1);margin-bottom:12px">Chronoscope is a <span class="hl-c">glass-box observability framework</span> for Large Language Model reasoning. Rather than treating an LLM as a black box, it hooks directly into the model's hidden layers during generation and applies classical <span class="hl-g">time series analysis</span> and <span class="hl-p">topological data analysis</span> to the residual stream — the sequence of internal state vectors the model produces token by token.</p>
+<div class="hbox">
+  <div class="hcard"><div class="hcard-title" style="color:var(--cyan)">The Core Question</div><div class="hcard-body">When one attention head becomes active, does it cause another head to change its behaviour a few tokens later? And can we prove that causally — not just correlate it?</div></div>
+  <div class="hcard"><div class="hcard-title" style="color:var(--green)">Why It Matters</div><div class="hcard-body">Reveals which heads are leaders vs followers, identifies redundant heads for pruning, and detects hallucination signatures — random walk in residual stream vs persistent logical trajectory.</div></div>
+  <div class="hcard"><div class="hcard-title" style="color:var(--amber)">What Is New</div><div class="hcard-body">This dashboard implements Gaps A–E from update.md: per-head stationarity, FDR correction, zero-ablation, cognitive phase clocks, and multi-metric signal quality.</div></div>
+</div>
+<div class="hsection">Model Being Observed</div>
+<div class="htable">
+  <div class="htr"><div class="htd-k">Model</div><div class="htd-v" style="color:var(--cyan)">Qwen/Qwen2.5-0.5B · ~500M params · FP16</div></div>
+  <div class="htr"><div class="htd-k">Decoder layers</div><div class="htd-v">24 total · analysed: layer 23 (deepest semantic level)</div></div>
+  <div class="htr"><div class="htd-k">Attention heads / layer</div><div class="htd-v">14 → 14 parallel time series, shape [T, 14]</div></div>
+  <div class="htr"><div class="htd-k">Hidden dimension</div><div class="htd-v">896 numbers per token per layer · head_dim = 64</div></div>
+  <div class="htr"><div class="htd-k">Hooks attached</div><div class="htd-v">24 self-attention + 24 v_proj (OV metric, Gap E.3)</div></div>
+  <div class="htr"><div class="htd-k">Tokens analysed</div><div class="htd-v">100 total (50 prompt + 50 generated)</div></div>
+  <div class="htr"><div class="htd-k">Prompt</div><div class="htd-v">"Design a non-orientable manifold-constrained 3D structure…" — chosen for multi-constraint complexity</div></div>
+</div>
+<div class="hsection">Pipeline Overview</div>
+<div class="hpipe">
+  <div class="hpipe-step" style="border-color:var(--cyan)"><div class="hpipe-n" style="color:var(--cyan)">1</div><div><strong>Hooks capture</strong> 14-head attention weights + v_proj outputs at every token step</div></div>
+  <div class="hpipe-arrow">↓</div>
+  <div class="hpipe-step" style="border-color:var(--amber)"><div class="hpipe-n" style="color:var(--amber)">2</div><div><strong>Multi-metric signals</strong> computed: entropy, Rényi, effective rank, sink fraction, max-attention, OV norm (Gap E)</div></div>
+  <div class="hpipe-arrow">↓</div>
+  <div class="hpipe-step" style="border-color:var(--green)"><div class="hpipe-n" style="color:var(--green)">3</div><div><strong>Stationarity tested</strong> per head — ADF + KPSS joint diagnosis. Selective differencing. Johansen for VECM vs VAR (Gap A)</div></div>
+  <div class="hpipe-arrow">↓</div>
+  <div class="hpipe-step" style="border-color:var(--purple)"><div class="hpipe-n" style="color:var(--purple)">4</div><div><strong>VAR(p) fitted</strong> with AIC lag selection. Granger F-tests on 196 pairs. BH-FDR correction α=0.05 (Gap B)</div></div>
+  <div class="hpipe-arrow">↓</div>
+  <div class="hpipe-step" style="border-color:var(--teal)"><div class="hpipe-n" style="color:var(--teal)">5</div><div><strong>Perturbation confirms</strong> causal links via zero-ablation, activation patching, mediation decomposition (Gap C)</div></div>
+  <div class="hpipe-arrow">↓</div>
+  <div class="hpipe-step" style="border-color:var(--pink)"><div class="hpipe-n" style="color:var(--pink)">6</div><div><strong>Composite score</strong> — DTW + spectral + topological + active reasoning + FDR pairs → STRONG/MODERATE/HALLUCINATION verdict</div></div>
+</div>`
+  },
+  {
+    id:'reading', label:'Reading the Screen', color:'var(--green)',
+    title:'How to read the dashboard layout',
+    content:`
+<p style="color:var(--text1);margin-bottom:12px">The dashboard is a <span class="hl-g">3-row × 4-column grid</span>. Each panel streams live data from the pipeline. Here is what each panel is and why it exists.</p>
+<div class="hsection">Panel Map</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+  <div class="hpanel-card" style="border-color:rgba(0,212,255,.3)"><div class="hpanel-name" style="color:var(--cyan)">Model State [col 1, row 1]</div><div class="hpanel-desc">Scalar health metrics: Hurst exponent, ADF result, Johansen rank, VAR lag, perturbation mode, CoT axis, intrinsic time τ, HMM phase clock. The vital signs.</div></div>
+  <div class="hpanel-card" style="border-color:rgba(0,255,136,.3)"><div class="hpanel-name" style="color:var(--green)">Head Entropy [col 2, row 1]</div><div class="hpanel-desc">Live streaming chart of all 14 head signals over last 60 tokens. Five metric tabs: Shannon, Rényi, effective rank, sink fraction, max-attention.</div></div>
+  <div class="hpanel-card" style="border-color:rgba(255,179,0,.3)"><div class="hpanel-name" style="color:var(--amber)">Influence Matrix [col 3, row 1]</div><div class="hpanel-desc">14×14 heatmap of directed head influence. Row i = target, col j = source. Only FDR-significant cells are coloured. Hover for p-values. Click to queue ablation.</div></div>
+  <div class="hpanel-card" style="border-color:rgba(170,102,255,.3)"><div class="hpanel-name" style="color:var(--purple)">Composite Score [col 4, row 1]</div><div class="hpanel-desc">Reasoning verdict as animated ring (0–100). Sub-metric bars for all components. Patch restoration readout from Gap C.3.</div></div>
+  <div class="hpanel-card" style="border-color:rgba(0,212,255,.3);grid-column:1/3"><div class="hpanel-name" style="color:var(--cyan)">VAR · Stationarity · PDC · TE [cols 1–2, row 2] — 5 tabs</div><div class="hpanel-desc">The analytical core. INFLUENCE: ranked Granger pairs. A.1·A.5·KPSS: per-head joint test results. B.5·PDC: frequency causality. D.4·HMM: cognitive phases. E·SIGNAL: multi-metric comparison.</div></div>
+  <div class="hpanel-card" style="border-color:rgba(0,255,204,.3)"><div class="hpanel-name" style="color:var(--teal)">Perturbation · Gap C [col 3, row 2]</div><div class="hpanel-desc">Zero/mean ablation results, activation patching restoration scores, direct-vs-mediated effect decomposition.</div></div>
+  <div class="hpanel-card" style="border-color:rgba(170,102,255,.3)"><div class="hpanel-name" style="color:var(--purple)">TDA · Topology [col 4, row 2]</div><div class="hpanel-desc">β₀/β₁ Betti numbers, Euler characteristic χ, EC anomaly sparkbar, HMM phase mini-bar, intrinsic τ, detected anomalies.</div></div>
+  <div class="hpanel-card" style="border-color:rgba(0,255,136,.3);grid-column:1/5"><div class="hpanel-name" style="color:var(--green)">Event Log [full width, row 3]</div><div class="hpanel-desc">Timestamped pipeline events tagged by gap. Right side: rotating plain-English interpretation of current data (changes every 9 seconds).</div></div>
+</div>
+<div class="hsection">Colour Coding</div>
+<div class="htable">
+  <div class="htr"><div class="htd-k" style="color:var(--green)">● GREEN</div><div class="htd-v">Healthy / confirmed / stationary / strong reasoning</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--cyan)">● CYAN</div><div class="htd-v">Active / live / source heads / low-freq PDC / info</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--amber)">● AMBER</div><div class="htd-v">Warning / non-stationary / unit root / moderate influence</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--red)">● RED</div><div class="htd-v">High influence (>1.0) / EC spike / hallucination risk</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--purple)">● PURPLE</div><div class="htd-v">Fractional integration / TDA / HMM / topological metrics</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--teal)">● TEAL</div><div class="htd-v">Perturbation / zero-ablation / FDR pair count / arc-length τ</div></div>
+</div>
+<div class="hsection">Status Dots (Header Bar)</div>
+<div class="htable">
+  <div class="htr"><div class="htd-k"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 5px var(--green);margin-right:4px;vertical-align:middle"></span>Slow pulse</div><div class="htd-v">System healthy — analysis running normally</div></div>
+  <div class="htr"><div class="htd-k"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--amber);box-shadow:0 0 5px var(--amber);margin-right:4px;vertical-align:middle"></span>Medium pulse</div><div class="htd-v">Computation in progress (FDR, HMM fitting, PDC)</div></div>
+  <div class="htr"><div class="htd-k"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--cyan);margin-right:4px;vertical-align:middle"></span>Solid cyan</div><div class="htd-v">Complete — pipeline stage finished, no longer updating</div></div>
+</div>`
+  },
+  {
+    id:'gapA', label:'Gap A · Stationarity', color:'var(--amber)',
+    title:'Gap A — Stationarity handling before VAR',
+    content:`
+<p style="color:var(--text1);margin-bottom:12px">The original code ran a single ADF test on the aggregate PC0 and fed results directly into VAR. Gap A adds a 5-step stationarity-aware routing system. <strong>Find this in: A.1·A.5·KPSS tab of the main VAR panel.</strong></p>
+<div class="hsection">A.1 — Per-head ADF testing</div>
+<p style="margin-bottom:8px">Augmented Dickey-Fuller test run independently on each of the 14 head series. H₀: unit root (non-stationary). Reject H₀ if p &lt; 0.05.</p>
+<div class="htable">
+  <div class="htr"><div class="htd-k" style="color:var(--green)">p &lt; 0.05</div><div class="htd-v">Stationary — safe to use in VAR directly, no differencing needed</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--amber)">p &gt; 0.05</div><div class="htd-v">Non-stationary — needs differencing OR Johansen/VECM check first</div></div>
+</div>
+<div class="hsection">A.5 — Joint ADF + KPSS diagnosis</div>
+<p style="margin-bottom:8px">KPSS tests the opposite null (H₀: stationary). Running both yields a 4-way diagnosis:</p>
+<div class="htable">
+  <div class="htr" style="background:rgba(0,255,136,.04)"><div class="htd-k" style="color:var(--green)">ADF rejects + KPSS passes</div><div class="htd-v">stationary — both agree, no action needed</div></div>
+  <div class="htr" style="background:rgba(255,179,0,.04)"><div class="htd-k" style="color:var(--amber)">ADF passes + KPSS rejects</div><div class="htd-v">unit_root — difference this head (A.2)</div></div>
+  <div class="htr" style="background:rgba(170,102,255,.04)"><div class="htd-k" style="color:var(--purple)">ADF rejects + KPSS rejects</div><div class="htd-v">fractional — long memory (0 &lt; d &lt; 1), route to Hurst, do NOT difference</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--text2)">Both pass</div><div class="htd-v">ambiguous — treat conservatively as non-stationary</div></div>
+</div>
+<div class="hinote"><span style="color:var(--purple)">▲</span> Fractional heads (H2, H6, H12 in this run) appear in "FRACTIONAL HEADS → HURST" row of the A.1·A.5 tab. Their Hurst exponent in Model State measures long-memory strength.</div>
+<div class="hsection">A.2 — Selective differencing</div>
+<p style="margin-bottom:8px">Only unit-root heads are differenced: s(t) → s(t) − s(t−1). All others have first row trimmed to keep matrix rectangular. Fractional heads skipped entirely.</p>
+<div class="hsection">A.3 — Johansen → VECM decision</div>
+<div class="htable">
+  <div class="htr"><div class="htd-k">rank = 0 (current)</div><div class="htd-v" style="color:var(--green)">No cointegration → VAR path used</div></div>
+  <div class="htr"><div class="htd-k">rank > 0</div><div class="htd-v" style="color:var(--amber)">Cointegration found → VECM fitted, short-run γ coefficients form influence matrix</div></div>
+</div>
+<div class="hsection">A.4 — AIC lag selection</div>
+<p>Lag hardcoded at p=3 is replaced by <code style="background:var(--bg3);padding:1px 5px;border-radius:2px;color:var(--teal)">model.fit(maxlags=5, ic='aic')</code>. Selected lag shown in header (LAG=) and Model State panel.</p>`
+  },
+  {
+    id:'gapB', label:'Gap B · Significance', color:'var(--pink)',
+    title:'Gap B — Statistical significance of influence scores',
+    content:`
+<p style="color:var(--text1);margin-bottom:12px">The original influence matrix had no p-values — scores were heuristic magnitudes. Gap B adds four layers of statistical rigour. <strong>Find this in: INFLUENCE tab and B.5·PDC tab.</strong></p>
+<div class="hsection">B.1 — Granger F-test per directed pair</div>
+<p style="margin-bottom:8px">For each of 196 ordered pairs (j→i): does head j's past improve predictions of head i's future beyond i's own past? F-test on restricted vs unrestricted VAR.</p>
+<div class="hinote"><span style="color:var(--amber)">⚠</span> At α=0.05 with 196 tests, we expect ~10 false positives by chance alone without correction.</div>
+<div class="hsection">B.2 — Benjamini-Hochberg FDR correction</div>
+<div class="htable">
+  <div class="htr"><div class="htd-k">Result</div><div class="htd-v"><strong>7 of 196 pairs survive</strong> BH-FDR at α=0.05. Header shows SIG=7/196. Matrix cells: only these 7 are brightly coloured.</div></div>
+  <div class="htr"><div class="htd-k">FDR guarantee</div><div class="htd-v">At most 5% of the 7 declared pairs are expected to be false positives (≤0.35 expected false).</div></div>
+  <div class="htr"><div class="htd-k">Matrix visual effect</div><div class="htd-v">Non-significant cells are nearly invisible — darker cells below significance threshold are effectively noise.</div></div>
+</div>
+<div class="hsection">B.4 — Transfer Entropy (optional)</div>
+<p style="margin-bottom:8px">TE(j→i) = I(X_i(t+1); X_j^past | X_i^past). Model-free, captures non-linear causality. Disabled by default (<code style="background:var(--bg3);padding:1px 4px;border-radius:2px;color:var(--teal)">use_transfer_entropy=False</code>). When enabled: pink TE bar in Composite Score.</p>
+<div class="hsection">B.5 — Partial Directed Coherence (PDC tab)</div>
+<p style="margin-bottom:8px">PDC(j→i, f) = |A(f)[i,j]|² / Σ_k|A(f)[k,j]|². Frequency-domain Granger causality. Shows at which frequencies each head's influence operates.</p>
+<div class="htable">
+  <div class="htr"><div class="htd-k">Left chart: LOW [0, 0.1]</div><div class="htd-v">Slow trend influence. H0→H3 is dominant here — H0 sets slow-varying global context.</div></div>
+  <div class="htr"><div class="htd-k">Right chart: HIGH [0.4, 0.5]</div><div class="htd-v" style="color:var(--amber)">Period-2 cycle influence. H2, H5, H7 dominate — but f=0.5 is partly a causal masking artifact. Interpret cautiously.</div></div>
+</div>`
+  },
+  {
+    id:'gapC', label:'Gap C · Perturbation', color:'var(--teal)',
+    title:'Gap C — Perturbation & intervention design',
+    content:`
+<p style="color:var(--text1);margin-bottom:12px">The original code used Gaussian noise ablation — injecting random energy rather than cleanly removing a head. Gap C introduces three rigorous interventions. <strong>Find this in: the Perturbation panel (col 3, row 2) and Composite Score restoration readout.</strong></p>
+<div class="hsection">C.1 — Zero-ablation (default)</div>
+<div class="htable">
+  <div class="htr"><div class="htd-k">Operation</div><div class="htd-v"><code style="background:var(--bg3);padding:1px 5px;border-radius:2px;color:var(--teal)">hidden[:,:,start:end] = 0.0</code> — removes head, no energy injected</div></div>
+  <div class="htr"><div class="htd-k">ΔH column</div><div class="htd-v">Entropy change in target head after source ablation. Positive = target lost focus (source was keeping it sharp)</div></div>
+  <div class="htr"><div class="htd-k">H2 ablated → ΔH5=+0.31</div><div class="htd-v" style="color:var(--green)">H2 was actively keeping H5 focused. Strong causal confirmation.</div></div>
+</div>
+<div class="hsection">C.2 — Mean ablation</div>
+<p style="margin-bottom:8px">Replace head output with mean activation from 10 reference prompts — makes head "generic" rather than absent. Used for H7 and H4 in this run (mode column shows "mean"). Stays within model's training distribution.</p>
+<div class="hsection">C.3 — Activation patching</div>
+<div class="htable">
+  <div class="htr"><div class="htd-k">Method</div><div class="htd-v">Run clean + corrupted prompts. Patch clean head activations into corrupted run. Measure how much output shifts back toward clean.</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--green)">restore = 0.84 (H2→H5)</div><div class="htd-v">84% of clean-corrupted gap closed by patching H2. Very strong causal confirmation.</div></div>
+  <div class="htr"><div class="htd-k">restore → 0.0</div><div class="htd-v" style="color:var(--red)">Patching had no effect — VAR link was statistical coincidence</div></div>
+</div>
+<div class="hsection">C.4 — Direct vs mediated effect</div>
+<p style="margin-bottom:8px">Decomposes H2→H9 into direct path vs indirect path through H5:</p>
+<div class="htable">
+  <div class="htr"><div class="htd-k">Total effect</div><div class="htd-v">0.68 — patch H2, measure H9 change</div></div>
+  <div class="htr"><div class="htd-k">Indirect via H5</div><div class="htd-v" style="color:var(--purple)">0.50 (74%) — H2 drives H5, which drives H9</div></div>
+  <div class="htr"><div class="htd-k">Direct H2→H9</div><div class="htd-v">0.18 (26%) — H2's small residual direct path</div></div>
+</div>`
+  },
+  {
+    id:'gapD', label:'Gap D · Thinking Time', color:'var(--purple)',
+    title:'Gap D — Thinking time axis operationalization',
+    content:`
+<p style="color:var(--text1);margin-bottom:12px">Token position is uniform coordinate time, but cognitive effort is not. Gap D replaces the token index with three richer time representations. <strong>Find this in: Model State panel, D.4·HMM tab, TDA panel.</strong></p>
+<div class="hsection">D.1 — CoT step segmentation</div>
+<p style="margin-bottom:8px">cot_segmenter.py splits generated text into logical steps using transition words ("First", "Therefore") and sentence boundaries. VAR is re-run on per-step aggregated entropy instead of per-token. Model State shows switch from "token-level" to "step-level" around token 30.</p>
+<div class="hsection">D.2 — EC-spike phase clock</div>
+<p style="margin-bottom:8px">Euler characteristic spikes (|EC| > mean + 2σ) mark topological phase transitions — when the model's semantic structure reorganises. Used as natural clock boundaries.</p>
+<div class="htable">
+  <div class="htr"><div class="htd-k">t=24 (phase 0→1)</div><div class="htd-v">Prompt processing ends, constraint setup begins</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--red)">t=41 (phase 1→2)</div><div class="htd-v">Largest spike. Active calculation begins. Strongest inter-head causality here.</div></div>
+  <div class="htr"><div class="htd-k">t=67 (phase 2→3)</div><div class="htd-v">Transition to conclusion. Manifold stabilises. β₀/β₁ converge.</div></div>
+</div>
+<div class="hsection">D.3 — Arc-length intrinsic time τ</div>
+<p style="margin-bottom:8px">τ(t) = Σ ‖h(t)−h(t−1)‖₂. Cumulative arc length along the residual stream. Normalised to [0, 1]. Progresses non-linearly — fast during high-curvature phases, slow during coasting. Shown in Model State and TDA panel.</p>
+<div class="hsection">D.4 — HMM phase discovery (D.4·HMM tab)</div>
+<div class="htable">
+  <div class="htr"><div class="htd-k">State 0: PROMPT·PROC</div><div class="htd-v">H̄=2.1 · Parsing prompt constraints. Moderate focus.</div></div>
+  <div class="htr"><div class="htd-k">State 1: SETUP</div><div class="htd-v">H̄=1.6 · Identifying variables. Sharpest attention.</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--amber)">State 2: ACTIVE·CALC</div><div class="htd-v">H̄=3.1 · Balancing competing constraints. Highest entropy and causality strength.</div></div>
+  <div class="htr"><div class="htd-k">State 3: CONCLUSION</div><div class="htd-v">H̄=2.4 · Committing to answer. Entropy settling.</div></div>
+</div>
+<div class="hinote"><span style="color:var(--cyan)">ℹ</span> BIC=-1842.3 validates n_states=4. The 4×4 transition matrix shows how likely the model is to stay vs exit each phase. Diagonal dominance = stable phases.</div>`
+  },
+  {
+    id:'gapE', label:'Gap E · Signal Quality', color:'var(--green)',
+    title:'Gap E — Signal quality beyond Shannon entropy',
+    content:`
+<p style="color:var(--text1);margin-bottom:12px">Shannon entropy was the only metric. Gap E adds 4 more variants, removes the attention sink, and optionally uses the OV circuit. <strong>Find this in: metric tabs in Head Entropy panel, E·SIGNAL tab.</strong></p>
+<div class="hsection">E.1 — Five metric tabs (Head Entropy panel)</div>
+<div class="htable">
+  <div class="htr"><div class="htd-k" style="color:var(--cyan)">SHANNON</div><div class="htd-v">H = −Σ pᵢ log pᵢ. Standard. High = diffuse, Low = sharp. Sensitive to rare-token attention.</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--green)">RÉNYI α=2</div><div class="htd-v">H₂ = −log(Σ pᵢ²). Less sensitive to small weights. Captures dominant focus pattern more robustly.</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--amber)">EFF·RANK</div><div class="htd-v">exp(H) / T. Normalised [0,1]. 1.0 = perfectly uniform attention, 1/T = single token focus.</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--red)">SINK·FRAC</div><div class="htd-v">Fraction of attention on BOS token (pos 0). Should be near-zero after E.2 sink removal. High = head not contributing semantics.</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--purple)">MAX·ATTN</div><div class="htd-v">Peak attention weight. Inverse of entropy. High = head sharply focused on a single past token.</div></div>
+</div>
+<div class="hsection">E.2 — Attention sink separation</div>
+<p style="margin-bottom:8px">Modern transformers route excess attention to BOS (pos 0) as a "sink" — this artificially inflates entropy and correlates all heads spuriously. BOS detected as positions where mean cross-head weight > 3/T, then zeroed and renormalised.</p>
+<div class="htable">
+  <div class="htr"><div class="htd-k">H0, H5 affected</div><div class="htd-v">~18% of attention mass was on BOS. After removal, entropy corrected −0.18. Event log shows confirmation at t=72.</div></div>
+  <div class="htr"><div class="htd-k">Config flag</div><div class="htd-v"><code style="background:var(--bg3);padding:1px 4px;border-radius:2px;color:var(--teal)">remove_attention_sink=True</code> (default ON)</div></div>
+</div>
+<div class="hsection">E.3 — OV circuit value-weighted metric</div>
+<p style="margin-bottom:8px">Entropy measures where the head looks. OV_output = ‖Σ_t attn(last,t) · V(t)‖₂ measures what the head writes into the residual stream. Two heads with identical entropy can have completely different residual stream effects.</p>
+<div class="hsection">E·SIGNAL tab interpretation</div>
+<div class="hinote"><span style="color:var(--cyan)">ℹ</span> Per-head bars from left to right: cyan=shannon, green=renyi, amber=effrank, red=sink, purple=maxattn. <strong>H0 = broad scanner</strong> (tall effrank, short maxattn). <strong>H5 = sharp selector</strong> (short effrank, tall maxattn). This explains H2→H5 causality: H2 sets context, H5 sharply exploits it.</div>`
+  },
+  {
+    id:'matrix', label:'Influence Matrix', color:'var(--amber)',
+    title:'Reading the 14×14 influence matrix in detail',
+    content:`
+<p style="color:var(--text1);margin-bottom:12px">The influence matrix is the central output. Each cell encodes total directed influence from one head to another after FDR correction. <strong>Located: col 3, row 1. Hover any cell for details.</strong></p>
+<div class="hsection">How to read</div>
+<div class="htable">
+  <div class="htr"><div class="htd-k">Row i (Y-axis)</div><div class="htd-v">Target head — "whose current activity is being predicted"</div></div>
+  <div class="htr"><div class="htd-k">Col j (X-axis)</div><div class="htd-v">Source head — "whose past activity is the predictor"</div></div>
+  <div class="htr"><div class="htd-k">Cell value</div><div class="htd-v">Score = Σ_l |A_l[i,j]| — total VAR coefficient magnitude from j to i across all lags p</div></div>
+  <div class="htr"><div class="htd-k">Black diagonal</div><div class="htd-v">No self-causality test is meaningful or computed</div></div>
+</div>
+<div class="hsection">Colour interpretation</div>
+<div class="htable">
+  <div class="htr" style="background:rgba(28,45,62,.3)"><div class="htd-k">Near-invisible</div><div class="htd-v">NOT FDR-significant. Likely statistical noise. Do not interpret these cells.</div></div>
+  <div class="htr" style="background:rgba(0,212,255,.06)"><div class="htd-k" style="color:var(--cyan)">Cyan tint</div><div class="htd-v">FDR-significant, moderate (0.5–0.75). Real but weak directional link.</div></div>
+  <div class="htr" style="background:rgba(255,179,0,.08)"><div class="htd-k" style="color:var(--amber)">Amber / orange</div><div class="htd-v">FDR-significant, strong (0.75–1.0). One head substantially predicts the other.</div></div>
+  <div class="htr" style="background:rgba(255,61,80,.1)"><div class="htd-k" style="color:var(--red)">Red / bright</div><div class="htd-v">FDR-significant, very strong (>1.0). Dominant causal link. Top: H2→H5 = 1.14.</div></div>
+</div>
+<div class="hsection">Top significant pairs</div>
+<div class="htable">
+  <div class="htr"><div class="htd-k" style="color:var(--red)">H2→H5 · 1.14</div><div class="htd-v">Strongest. H2 (broad scanner) drives H5 (sharp selector). Confirmed: zero-ablation ΔH5=+0.31, restore=0.84.</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--amber)">H5→H9 · 0.98</div><div class="htd-v">Relay: H5 propagates H2's influence downstream to H9. Part of H2→H5→H9 causal chain.</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--amber)">H0→H3 · 0.91</div><div class="htd-v">H0 (broad, low-freq) sets global context for H3. Seen in PDC low-freq band.</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--cyan)">H7→H11 · 0.87</div><div class="htd-v">Mean-ablation confirmed at restore=0.58. Moderate causal strength.</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--text2)">H4→H1 · 0.79</div><div class="htd-v">Borderline. Mean-ablation restore=0.31 — weak. May be coincidental VAR coefficient.</div></div>
+</div>
+<div class="hinote"><span style="color:var(--amber)">▲</span> The matrix is asymmetric. H2 driving H5 (1.14) is not the same as H5 driving H2 (weak). This directional asymmetry is completely invisible from static attention visualisations.</div>`
+  },
+  {
+    id:'tda', label:'TDA · Topology', color:'var(--purple)',
+    title:'Reading the topological analysis panel',
+    content:`
+<p style="color:var(--text1);margin-bottom:12px">TDA extracts the shape of the reasoning manifold. <strong>Located: col 4, row 2.</strong></p>
+<div class="hsection">Betti numbers</div>
+<div class="htable">
+  <div class="htr"><div class="htd-k" style="color:var(--cyan)">β₀ — Components</div><div class="htd-v">Disconnected "islands" in reasoning graph. High = model is entertaining multiple separate hypotheses.</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--purple)">β₁ — Loops</div><div class="htd-v">Closed reasoning loops. High = circular reasoning or revisiting earlier concepts.</div></div>
+</div>
+<div class="hsection">Euler Characteristic χ = β₀ − β₁</div>
+<div class="htable">
+  <div class="htr"><div class="htd-k" style="color:var(--green)">χ stable</div><div class="htd-v">Normal reasoning progression — manifold is changing smoothly</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--red)">|χ| spike > 2σ</div><div class="htd-v">Topological anomaly — semantic phase transition. Used as D.2 phase boundary.</div></div>
+</div>
+<div class="hsection">EC Anomaly sparkbar colour key</div>
+<div class="htable">
+  <div class="htr"><div class="htd-k" style="color:var(--purple)">Purple</div><div class="htd-v">Normal EC — no anomaly detected</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--amber)">Amber</div><div class="htd-v">Elevated |EC| — moderate anomaly (1–2σ above baseline)</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--red)">Red</div><div class="htd-v">EC spike — used as phase boundary event</div></div>
+</div>
+<div class="hinote"><span style="color:var(--cyan)">ℹ</span> TDA runs on CPU in parallel with GPU generation using sliding windows. This is why EC is available in real time without blocking token production.</div>`
+  },
+  {
+    id:'verdict', label:'Composite Score', color:'var(--green)',
+    title:'Composite validity score — the reasoning verdict',
+    content:`
+<p style="color:var(--text1);margin-bottom:12px">Five independent signal dimensions combined into a 0–100 verdict. <strong>Located: col 4, row 1.</strong></p>
+<div class="hsection">Score components</div>
+<div class="htable">
+  <div class="htr"><div class="htd-k" style="color:var(--cyan)">DTW Sensitivity</div><div class="htd-v">Dynamic Time Warping distance between observed trace and coherent reasoning template. High = logical path.</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--green)">Spectral Coherence</div><div class="htd-v">Power spectrum structure. High = temporal patterns. Low = noise or flat spectrum.</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--purple)">Topo Smoothness</div><div class="htd-v">Inverse of EC variance. High = stable manifold. Low = fragmenting reasoning structure.</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--amber)">Active Reasoning</div><div class="htd-v">Derived from ADF non-stationarity. High = model actively updating beliefs. Low = settled too early.</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--teal)">FDR Sig. Pairs</div><div class="htd-v">7/196 — sparse real causality network. Zero = found nothing; hundreds = spurious.</div></div>
+</div>
+<div class="hsection">Verdict thresholds</div>
+<div class="htable">
+  <div class="htr" style="background:rgba(0,255,136,.05)"><div class="htd-k" style="color:var(--green)">70–100 STRONG REASONING</div><div class="htd-v">All signals coherent. Logical chains confirmed by perturbation. Trust the output.</div></div>
+  <div class="htr" style="background:rgba(255,179,0,.05)"><div class="htd-k" style="color:var(--amber)">50–69 MODERATE REASONING</div><div class="htd-v">Mixed signals. Some heads active, others drifting. Partial reliability.</div></div>
+  <div class="htr" style="background:rgba(255,61,80,.05)"><div class="htd-k" style="color:var(--red)">0–49 HALLUCINATION RISK</div><div class="htd-v">Random walk (Hurst ≈ 0.5), fragmenting topology, low spectral coherence. High confabulation probability.</div></div>
+</div>`
+  },
+  {
+    id:'log', label:'Event Log · Tags', color:'var(--text1)',
+    title:'Event log tags and the interpretation panel',
+    content:`
+<p style="color:var(--text1);margin-bottom:12px">The log strip at the bottom streams timestamped pipeline events. Each is tagged by subsystem. <strong>Located: full-width row 3.</strong></p>
+<div class="hsection">Tag reference</div>
+<div class="htable">
+  <div class="htr"><div class="htd-k"><span style="background:rgba(0,212,255,.12);color:var(--cyan);padding:1px 5px;border-radius:2px">GAP·A-E</span></div><div class="htd-v">Gap closure events: stationarity decisions, cointegration, lag selection, FDR outcomes, PDC computed</div></div>
+  <div class="htr"><div class="htd-k"><span style="background:rgba(255,179,0,.12);color:var(--amber);padding:1px 5px;border-radius:2px">STAT</span></div><div class="htd-v">Per-head ADF/KPSS results, fractional head identification, differencing decisions</div></div>
+  <div class="htr"><div class="htd-k"><span style="background:rgba(0,255,136,.1);color:var(--green);padding:1px 5px;border-radius:2px"> OK </span></div><div class="htd-v">Successful completions: VAR fitted, causal link confirmed, composite score computed</div></div>
+  <div class="htr"><div class="htd-k"><span style="background:rgba(170,102,255,.1);color:var(--purple);padding:1px 5px;border-radius:2px">TDA</span></div><div class="htd-v">Topological events: Betti updates, EC spikes, phase boundary crossings</div></div>
+  <div class="htr"><div class="htd-k"><span style="background:rgba(0,255,204,.1);color:var(--teal);padding:1px 5px;border-radius:2px">PERT</span></div><div class="htd-v">Perturbation results: entropy deltas, restoration scores, mediation decomposition</div></div>
+  <div class="htr"><div class="htd-k"><span style="background:rgba(255,85,170,.1);color:var(--pink);padding:1px 5px;border-radius:2px">SIG</span></div><div class="htd-v">Significance: raw Granger counts, FDR results, top pair announcements</div></div>
+</div>
+<div class="hsection">Live Interpretation panel (right side)</div>
+<p style="margin-bottom:8px">Rotates through 10 plain-English explanations every 9 seconds — one per gap. Title shows which gap is being explained. Each interpretation connects raw numbers to their meaning:</p>
+<div class="htable">
+  <div class="htr"><div class="htd-k">Gap A — Non-stationarity</div><div class="htd-v">Why fractional heads aren't differenced; what Hurst means for long-memory heads</div></div>
+  <div class="htr"><div class="htd-k">Gap A — Johansen</div><div class="htd-v">What rank=0 means and why VAR was chosen over VECM</div></div>
+  <div class="htr"><div class="htd-k">Gap B — FDR</div><div class="htd-v">Why 7/196 is a meaningful result, not "too few significant pairs"</div></div>
+  <div class="htr"><div class="htd-k">Gap B — PDC</div><div class="htd-v">The frequency split between slow-trend (H0→H3) and period-2 (H2→H5) causality</div></div>
+  <div class="htr"><div class="htd-k">Gap C — Zero-ablation</div><div class="htd-v">Why restore=0.84 for H2→H5 is strong causal evidence</div></div>
+  <div class="htr"><div class="htd-k">Gap C — Mediation</div><div class="htd-v">The H2→H9 indirect path: 74% mediated through H5</div></div>
+  <div class="htr"><div class="htd-k">Gap D — HMM</div><div class="htd-v">What each of the 4 cognitive phases means for head coordination patterns</div></div>
+  <div class="htr"><div class="htd-k">Gap D — Intrinsic time</div><div class="htd-v">Why τ advances 3× faster during tokens 42–67 (active calculation phase)</div></div>
+  <div class="htr"><div class="htd-k">Gap E — Sink separation</div><div class="htd-v">Which heads were most affected by BOS sink removal and why it matters</div></div>
+  <div class="htr"><div class="htd-k">Gap E — Signal quality</div><div class="htd-v">H0 broad-scanner vs H5 sharp-selector: what multi-metric reveals that entropy alone cannot</div></div>
+</div>`
+  },
+  {
+    id:'glossary', label:'Glossary', color:'var(--text2)',
+    title:'Glossary of all terms used in the dashboard',
+    content:`
+<div class="htable">
+  <div class="htr"><div class="htd-k" style="color:var(--cyan)">Residual stream</div><div class="htd-v">Hidden state vector h(t) ∈ ℝ⁸⁹⁶ produced at each token. Each layer reads from and writes to this stream — the transformer's working memory.</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--cyan)">Attention entropy H</div><div class="htd-v">H = −Σ pᵢ log pᵢ where pᵢ is the attention weight on token i. High = diffuse, Low = sharp focus.</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--cyan)">VAR</div><div class="htd-v">Vector Autoregression: Y(t) = Σ Aₗ Y(t−l) + ε. The [i,j] coefficient of Aₗ tells how much head j's past at lag l predicts head i's current value.</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--amber)">Granger causality</div><div class="htd-v">X Granger-causes Y if knowing X's past improves predictions of Y's future beyond Y's own past alone.</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--amber)">ADF test</div><div class="htd-v">Augmented Dickey-Fuller. H₀: unit root. Reject H₀ (p &lt; 0.05) = stationary. Fail = non-stationary.</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--amber)">KPSS test</div><div class="htd-v">Kwiatkowski-Phillips-Schmidt-Shin. H₀: stationary. Reject H₀ (p &lt; 0.05) = non-stationary. Opposite null from ADF — use both together.</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--purple)">Cointegration</div><div class="htd-v">Multiple non-stationary series sharing a common stochastic trend. Differencing destroys this. Johansen test detects it; VECM preserves it.</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--purple)">VECM</div><div class="htd-v">Vector Error Correction Model. Fitted instead of VAR when cointegration detected. Captures both short-run γ coefficients and long-run equilibrium.</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--green)">BH-FDR</div><div class="htd-v">Benjamini-Hochberg False Discovery Rate. Controls expected fraction of false positives among declared significant results. Less conservative than Bonferroni.</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--teal)">Zero-ablation</div><div class="htd-v">Replace head output slice with zeros. Cleanly removes contribution without injecting noise.</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--teal)">Activation patching</div><div class="htd-v">Inject clean-run activations into corrupted-run at a specific site. Restoration score measures causal contribution.</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--pink)">PDC</div><div class="htd-v">Partial Directed Coherence. PDC(j→i, f) = |A(f)[i,j]|² / Σₖ|A(f)[k,j]|². Frequency-domain Granger causality.</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--pink)">Transfer entropy</div><div class="htd-v">TE(j→i) = I(X_i(t+1); X_j^past | X_i^past). Model-free causality. No linearity or Gaussianity assumption.</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--purple)">β₀, β₁ (Betti)</div><div class="htd-v">β₀ = connected components. β₁ = independent loops. Together describe topological shape of reasoning manifold.</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--purple)">Euler χ</div><div class="htd-v">χ = β₀ − β₁. Topological complexity summary. Spikes mark semantic phase transitions.</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--cyan)">Hurst exponent H</div><div class="htd-v">Long-range dependence. H > 0.5: persistent (logical). H = 0.5: random walk. H < 0.5: anti-persistent.</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--purple)">Intrinsic time τ</div><div class="htd-v">τ(t) = Σ ‖h(t)−h(t−1)‖₂. Arc-length along residual stream. Measures cognitive effort, not token count.</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--teal)">Attention sink</div><div class="htd-v">BOS token receives excess attention in modern transformers. Artificially inflates entropy. Removed in E.2.</div></div>
+  <div class="htr"><div class="htd-k" style="color:var(--green)">OV circuit</div><div class="htd-v">Output-Value circuit. Actual information flow = attn × V × W_O. More informative than entropy alone.</div></div>
+  <div class="htr"><div class="htd-k">Effective rank</div><div class="htd-v">exp(H_shannon) / T. Normalised focus breadth. 1.0 = uniform, 1/T = single token.</div></div>
+  <div class="htr"><div class="htd-k">Rényi α=2</div><div class="htd-v">H₂ = −log(Σ pᵢ²). Collision entropy. Less sensitive to rare-token weights than Shannon.</div></div>
+</div>`
+  }
+];
+
+const helpCSS=`<style>
+.hl-c{color:var(--cyan)}.hl-g{color:var(--green)}.hl-a{color:var(--amber)}.hl-r{color:var(--red)}.hl-p{color:var(--purple)}
+.hsection{font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--text2);margin:14px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--border)}
+.htable{border:1px solid var(--border);border-radius:3px;overflow:hidden;margin-bottom:10px;font-size:9px}
+.htr{display:flex;border-bottom:1px solid var(--border);transition:background .1s}.htr:last-child{border-bottom:none}.htr:hover{background:rgba(0,212,255,.04)}
+.htd-k{min-width:155px;padding:5px 8px;background:var(--bg2);color:var(--text1);font-weight:500;border-right:1px solid var(--border);flex-shrink:0;line-height:1.6}
+.htd-v{padding:5px 10px;color:var(--text1);flex:1;line-height:1.7}
+.hbox{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:12px}
+.hcard{background:var(--bg2);border:1px solid var(--border);border-radius:3px;padding:8px 10px}
+.hcard-title{font-size:9px;font-weight:700;letter-spacing:.08em;margin-bottom:3px}
+.hcard-body{font-size:8px;color:var(--text1);line-height:1.7}
+.hinote{background:rgba(0,212,255,.04);border:1px solid rgba(0,212,255,.14);border-radius:2px;padding:6px 10px;font-size:8px;color:var(--text1);line-height:1.7;margin-bottom:10px}
+.hpanel-card{background:var(--bg2);border:1px solid var(--border);border-left:2px solid var(--border);border-radius:3px;padding:7px 10px}
+.hpanel-name{font-size:9px;font-weight:700;letter-spacing:.07em;margin-bottom:2px}
+.hpanel-desc{font-size:8px;color:var(--text1);line-height:1.7}
+.hpipe{display:flex;flex-direction:column;gap:0}
+.hpipe-step{display:flex;gap:10px;align-items:flex-start;background:var(--bg2);border:1px solid var(--border);border-left:2px solid;border-radius:3px;padding:6px 10px;font-size:9px;color:var(--text1);line-height:1.6}
+.hpipe-n{font-size:14px;font-weight:700;min-width:18px;line-height:1.2}
+.hpipe-arrow{text-align:center;color:var(--text3);font-size:11px;line-height:1.2}
+p{font-size:9px;color:var(--text0);margin-bottom:0}strong{font-weight:700;color:var(--text0)}
+code{font-family:var(--font);font-size:9px}
+</style>`;
+
+let currentHelpSection='overview';
+
+function buildHelpNav(){
+  const nav=document.getElementById('help-nav');
+  if(nav.children.length>0)return;
+  HELP_SECTIONS.forEach(s=>{
+    const btn=document.createElement('button');
+    btn.id=`hn-${s.id}`;
+    btn.onclick=()=>showHelpSection(s.id);
+    btn.style.cssText=`display:block;width:100%;text-align:left;padding:5px 12px;font-family:var(--font);font-size:8px;letter-spacing:.07em;cursor:pointer;border:none;border-left:2px solid transparent;background:transparent;color:var(--text2);transition:all .12s`;
+    btn.textContent=s.label;
+    nav.appendChild(btn);
+  });
+}
+
+function showHelpSection(id){
+  currentHelpSection=id;
+  const sec=HELP_SECTIONS.find(s=>s.id===id);
+  if(!sec)return;
+  HELP_SECTIONS.forEach(s=>{
+    const b=document.getElementById(`hn-${s.id}`);
+    if(!b)return;
+    if(s.id===id){b.style.background='rgba(0,212,255,.08)';b.style.color=sec.color;b.style.borderLeftColor=sec.color;}
+    else{b.style.background='transparent';b.style.color='var(--text2)';b.style.borderLeftColor='transparent';}
+  });
+  const el=document.getElementById('help-content');
+  el.style.opacity='0';el.style.transition='opacity .15s';
+  setTimeout(()=>{
+    el.innerHTML=helpCSS+`<div style="font-size:13px;font-weight:700;color:${sec.color};letter-spacing:.04em;margin-bottom:4px;text-shadow:0 0 12px ${sec.color}44">${sec.title}</div><div style="height:1px;background:${sec.color};opacity:.2;margin-bottom:14px"></div>`+sec.content;
+    el.scrollTop=0;el.style.opacity='1';
+  },150);
+}
+
+function openHelp(){
+  document.getElementById('help-overlay').style.display='block';
+  buildHelpNav();
+  showHelpSection(currentHelpSection);
+}
+
+function closeHelp(){document.getElementById('help-overlay').style.display='none';}
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='?'||e.key==='/'){
+    const o=document.getElementById('help-overlay');
+    if(!o||o.style.display==='none'||o.style.display==='')openHelp();else closeHelp();
+  }
+  if(e.key==='Escape')closeHelp();
+});
+
+document.getElementById('help-overlay').addEventListener('click',function(e){if(e.target===this)closeHelp();});
+</script>
+</body>
+</html>

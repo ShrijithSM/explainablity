@@ -29,65 +29,11 @@ from chronoscope.interceptor import ChronoscopeInterceptor
 from chronoscope.observer import SignalObserver
 from chronoscope.analyzer import CausalAnalyzer
 from chronoscope.synthesizer import ReportSynthesizer
+from chronoscope.dashboard_bridge import DashboardBridge
 
 console = Console()
 
 
-def _append_interpretive_footnote(
-    model, tokenizer, report_path: str, config: ChronoscopeConfig
-) -> None:
-    """
-    After the main report is written, run a final query to the SAME LLM,
-    asking it to interpret the report and append a short human-readable
-    footnote.
-    """
-    try:
-        with open(report_path, "r", encoding="utf-8") as f:
-            report_md = f.read()
-    except Exception as e:
-        console.print(f"[yellow]Could not read report for interpretation: {e}[/]")
-        return
-
-    # Truncate very long reports to avoid context blowup
-    max_chars = 8000
-    if len(report_md) > max_chars:
-        report_md = report_md[-max_chars:]
-
-    system_prompt = (
-        "You are an interpretability assistant. Read the Chronoscope causal "
-        "validity report below and write a short human-readable footnote that "
-        "summarizes what the metrics and plots imply about the model's reasoning. "
-        "Focus on: (1) how causally grounded the reasoning is, (2) whether the "
-        "trajectory looks smooth vs noisy, and (3) any caveats. "
-        "Keep it to 3–5 concise bullet points.\n\n"
-    )
-
-    full_prompt = system_prompt + "REPORT START:\n" + report_md + "\n\nFootnote:"
-
-    inputs = tokenizer(full_prompt, return_tensors="pt")
-    inputs = {k: v.to(config.device) for k, v in inputs.items()}
-
-    with torch.no_grad():
-        output = model.generate(
-            **inputs,
-            max_new_tokens=256,
-            do_sample=False,
-            eos_token_id=tokenizer.eos_token_id,
-        )
-
-    generated = tokenizer.decode(
-        output[0][inputs["input_ids"].shape[1] :], skip_special_tokens=True
-    )
-
-    footnote_header = "\n\n## 7. Interpretive Footnote\n"
-    footnote_text = footnote_header + generated.strip() + "\n"
-
-    try:
-        with open(report_path, "a", encoding="utf-8") as f:
-            f.write(footnote_text)
-        console.print("[green]Appended interpretive footnote to report.[/]")
-    except Exception as e:
-        console.print(f"[yellow]Failed to append footnote: {e}[/]")
 
 
 def run(config: ChronoscopeConfig = None):
@@ -113,6 +59,23 @@ def run(config: ChronoscopeConfig = None):
     analyzer = CausalAnalyzer(interceptor, observer, config)
     synthesizer = ReportSynthesizer(config)
 
+    # ── Dashboard Bridge (Integration Guide §7) ────────────────────────
+    bridge = None
+    try:
+        bridge = DashboardBridge(
+            transport=getattr(config, "dashboard_transport", "websocket"),
+            ws_port=int(getattr(config, "dashboard_ws_port", 8765)),
+        ).start()
+        dashboard_url = bridge.serve_dashboard(
+            getattr(config, "dashboard_html_path", "integration_hub/frontend/public/chronoscope_live.html"),
+            port=int(getattr(config, "dashboard_http_port", 8766)),
+        )
+        console.print(f"  [bold green]Dashboard:[/] {dashboard_url}")
+        bridge.push_log("ok", f"Exp1 starting · model={config.model_name}")
+    except Exception as e:
+        bridge = None
+        console.print(f"  [yellow]Dashboard bridge disabled: {e}[/]")
+
     # ── Step 3: Capture Clean Trajectory ────────────────────────────────
     prompt = config.clean_prompt
     console.print(f"\n[bold]Step 3:[/] Capturing reasoning trajectory...")
@@ -128,8 +91,16 @@ def run(config: ChronoscopeConfig = None):
         return
 
     # Use the LAST decoder layer for primary analysis
-    layer_names = sorted(trajectory.keys())
-    target_layer = layer_names[-1]
+    from chronoscope.models import get_deepest_layer
+    # Sort layers numerically to ensure correct mid-layer selection later
+    def get_index(name):
+        parts = name.split(".")
+        for p in reversed(parts):
+            if p.isdigit():
+                return int(p)
+        return -1
+    layer_names = sorted(trajectory.keys(), key=get_index)
+    target_layer = get_deepest_layer(layer_names)
     traj_tensor = trajectory[target_layer]
     console.print(
         f"  Primary analysis layer: {target_layer} "
@@ -139,6 +110,20 @@ def run(config: ChronoscopeConfig = None):
     # ── Step 4: Classical Time Series Analysis ──────────────────────────
     console.print(f"\n[bold]Step 4:[/] Running classical time series analysis...")
     observer_results = observer.full_analysis(traj_tensor)
+
+    # Push per-token entropy frames to dashboard
+    if bridge:
+        metric_series = interceptor.get_head_metric_series(target_layer)
+        n_tokens = traj_tensor.shape[0] if hasattr(traj_tensor, "shape") else 0
+        for t in range(n_tokens):
+            bridge.push_token_frame(
+                token_idx=t,
+                interceptor=interceptor,
+                observer=observer,
+                config=config,
+            )
+        bridge.push_signal_quality_frame(interceptor, config)
+        bridge.push_log("ok", f"Streamed {n_tokens} token frames to dashboard")
 
     meta = observer_results["meta"]
     console.print(f"  Tokens: {meta['n_tokens']}, SVD components: {meta['n_svd_components']}")
@@ -225,6 +210,19 @@ def run(config: ChronoscopeConfig = None):
     betti = tda_results.get("betti_numbers", {})
     console.print(f"  Betti numbers: {betti}")
 
+    # Push TDA frame to dashboard
+    if bridge:
+        bridge.push_tda_frame(
+            tda_result={
+                "betti0": int(betti.get("betti_0", 0)),
+                "betti1": int(betti.get("betti_1", 0)),
+                "euler": int(betti.get("betti_0", 0) - betti.get("betti_1", 0)),
+                "ec_series": [],
+                "anomalies": [],
+            },
+            current_token=meta["n_tokens"] - 1,
+        )
+
     # Optional: sliding-window TDA to surface local topological changes
     if getattr(config, "tda_enable_windowed", False):
         console.print(
@@ -263,10 +261,12 @@ def run(config: ChronoscopeConfig = None):
     console.print(f"\n[bold]Step 9:[/] Generating causal report...")
 
     # Build a minimal patching result dict for the report
+    token_labels = interceptor.get_token_labels(prompt, generated_text)
+
     patching_results = {
         "heatmap": None,  # Full sweep skipped in Phase 1 for speed
         "clean_text": generated_text,
-        "token_labels": [],
+        "token_labels": token_labels,
         "layer_names": layer_names,
     }
 
@@ -284,11 +284,34 @@ def run(config: ChronoscopeConfig = None):
     console.rule("[bold green]Experiment 1 Complete[/]")
     console.print(f"Report: {report_path}")
 
-    # ── Step 10: Interpretive Footnote via the same LLM ──────────────────
-    console.print(
-        "\n[bold]Step 10:[/] Asking the model to add an interpretive footnote..."
+    synthesizer.append_interpretive_footnote(
+        model, tokenizer, report_path, observer_results, token_labels
     )
-    _append_interpretive_footnote(model, tokenizer, report_path, config)
+
+    # Push composite score to dashboard
+    if bridge:
+        composite_frame = {
+            "score": int(round(validity["composite_validity"] * 100)),
+            "dtw_sensitivity": validity.get("dtw_sensitivity"),
+            "spectral_coherence": validity.get("spectral_coherence"),
+            "topo_smoothness": validity.get("topological_smoothness"),
+            "active_reasoning": validity.get("active_reasoning"),
+            "fdr_sig_pairs": 0,
+            "te_score": None,
+            "verdict": (
+                "STRONG REASONING" if validity["composite_validity"] >= 0.7 else
+                "MODERATE REASONING" if validity["composite_validity"] >= 0.4 else
+                "HALLUCINATION RISK"
+            ),
+            "n_heads": int(getattr(config, "n_heads", 14)),
+        }
+        interpretation = {
+            "source": "Exp1 Correlational",
+            "text": f"Validity={validity['composite_validity']:.3f}, Verdict={validity['verdict']}",
+        }
+        bridge.push_score_frame(composite_frame, interpretation)
+        bridge.push_log("ok", f"Exp1 complete · report={os.path.basename(report_path)}")
+        bridge.stop()
 
     # Cleanup
     interceptor.cleanup()

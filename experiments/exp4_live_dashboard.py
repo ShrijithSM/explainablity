@@ -111,9 +111,9 @@ def main():
             var = 0.0
             
             # Use the available layer (accommodating aggressive GC in interceptor.py)
-            available_layers = sorted(current_traj.keys())
-            if available_layers:
-                target_layer = available_layers[-1] # The one that survived GC
+            from chronoscope.models import get_deepest_layer
+            target_layer = get_deepest_layer(current_traj.keys())
+            if target_layer:
                 if len(current_traj[target_layer]) > prompt_len:
                     gen_only_traj = current_traj[target_layer][prompt_len:]
                     

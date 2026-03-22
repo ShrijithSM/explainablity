@@ -50,11 +50,13 @@ def run(config: ChronoscopeConfig = None):
 
     prompt = config.clean_prompt
 
-    # ── Step 3: Full Causal Patching Sweep ──────────────────────────────
-    console.print(f"\n[bold]Step 3:[/] Running FULL causal patching sweep...")
-    console.print(f"  Prompt: [italic]{prompt}[/]")
+    if getattr(config, "optimize_sweep", False):
+        console.print("  [yellow]Optimization active: Using stochastic salience-based sweep.[/]")
+        patching_results = analyzer.stochastic_patching_sweep(prompt, top_k=30)
+    else:
+        console.print("  [blue]Optimization disabled: Running FULL exhaustive sweep. This will take time.[/]")
+        patching_results = analyzer.causal_patching_sweep(prompt)
 
-    patching_results = analyzer.causal_patching_sweep(prompt)
     heatmap = patching_results["heatmap"]
     layer_names = patching_results["layer_names"]
     token_labels = patching_results["token_labels"]
@@ -80,8 +82,9 @@ def run(config: ChronoscopeConfig = None):
     console.print(f"\n[bold]Step 4:[/] Running time series analysis on clean trace...")
 
     # Get clean trajectory from the sweep's internal capture
+    from chronoscope.models import get_deepest_layer
     clean_traj, clean_text = interceptor.capture_generation(prompt)
-    target_layer = sorted(clean_traj.keys())[-1]
+    target_layer = get_deepest_layer(clean_traj.keys())
     traj_tensor = clean_traj[target_layer]
     observer_results = observer.full_analysis(traj_tensor)
 
@@ -103,7 +106,7 @@ def run(config: ChronoscopeConfig = None):
     best_li = flat_idx[0] // heatmap.shape[1]
     best_ti = flat_idx[0] % heatmap.shape[1]
     best_layer = layer_names[best_li]
-    best_token = patching_results["token_indices"][best_ti]
+    best_token = best_ti
 
     console.print(f"  Patching layer={best_layer}, token={best_token}")
 
@@ -159,6 +162,11 @@ def run(config: ChronoscopeConfig = None):
 
     console.rule("[bold green]Experiment 2 Complete[/]")
     console.print(f"Report: {report_path}")
+
+    # ── Step 9: Interpretive Footnote ──────────────────────────────────
+    synthesizer.append_interpretive_footnote(
+        model, tokenizer, report_path, observer_results, token_labels
+    )
 
     interceptor.cleanup()
     return report_path
