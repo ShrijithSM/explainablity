@@ -1704,6 +1704,79 @@ class CausalAnalyzer:
     #  NEXUS Layer: Hypergraph & Isomorphic Mapping
     # ------------------------------------------------------------------ #
 
+    def _label_hyperedge_with_llm(
+        self,
+        member_labels: List[str],
+        layer_name: str,
+        weight: float,
+    ) -> str:
+        """
+        Call a small local LLM to generate a human-readable principle label
+        for a hyperedge.  Falls back to the heuristic label on any error.
+
+        Supports two transports controlled by config.local_llm_transport:
+          • "ollama"        — HTTP POST to localhost:11434/api/generate
+          • "transformers"  — HuggingFace text-generation pipeline
+        """
+        fallback = f"Motif @ {layer_name} ({member_labels[0] if member_labels else '?'}...)"
+
+        if not getattr(self.config, "use_local_llm_labeling", False):
+            return fallback
+
+        tokens_preview = ", ".join(member_labels[:6])
+        prompt_text = (
+            f"You are an interpretability tool. Given a cluster of tokens "
+            f"[{tokens_preview}] co-activating in transformer layer '{layer_name}' "
+            f"(cosine similarity weight {weight:.2f}), describe the abstract "
+            f"semantic/structural principle in ≤8 words. Output ONLY the label."
+        )
+
+        transport = getattr(self.config, "local_llm_transport", "ollama")
+        model_id = getattr(self.config, "local_llm_model", "qwen2.5-coder:3b")
+        timeout = getattr(self.config, "local_llm_timeout", 10.0)
+        max_tok = getattr(self.config, "local_llm_max_tokens", 60)
+
+        try:
+            if transport == "ollama":
+                import json
+                import urllib.request
+
+                payload = json.dumps({
+                    "model": model_id,
+                    "prompt": prompt_text,
+                    "stream": False,
+                    "options": {"num_predict": max_tok},
+                }).encode()
+                req = urllib.request.Request(
+                    "http://localhost:11434/api/generate",
+                    data=payload,
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=timeout) as resp:
+                    data = json.loads(resp.read().decode())
+                label = data.get("response", "").strip()
+                return label if label else fallback
+
+            elif transport == "transformers":
+                from transformers import pipeline as hf_pipeline
+                if not hasattr(self, "_label_pipeline"):
+                    self._label_pipeline = hf_pipeline(
+                        "text-generation",
+                        model=model_id,
+                        max_new_tokens=max_tok,
+                        device_map="auto",
+                    )
+                result = self._label_pipeline(prompt_text)
+                label = result[0]["generated_text"].replace(prompt_text, "").strip()
+                return label if label else fallback
+
+        except Exception as exc:
+            console.print(f"[yellow]LLM labeling failed ({exc}), using heuristic.[/]")
+            return fallback
+
+        return fallback
+
     def extract_hyperedges(
         self,
         trajectory: torch.Tensor,
@@ -1738,16 +1811,19 @@ class CausalAnalyzer:
             cluster_indices = np.where(sim_matrix[i] > threshold)[0]
             if len(cluster_indices) > 2: # Minimal motif size
                 member_labels = [token_labels[idx] for idx in cluster_indices if idx < len(token_labels)]
-                
-                # Mock high-level principle labeling (normally would call a small LLM)
-                principle = f"Motif @ {layer_name} ({member_labels[0]}...)"
+                edge_weight = float(np.mean(sim_matrix[i, cluster_indices]))
+
+                # Optionally call a local LLM to produce a richer semantic label.
+                principle = self._label_hyperedge_with_llm(
+                    member_labels, layer_name, edge_weight
+                )
                 
                 hyperedges.append({
                     "hyperedge_id": f"he-{uuid.uuid4().hex[:8]}",
                     "principle": principle,
                     "tokens": member_labels,
                     "layer": layer_name,
-                    "weight": float(np.mean(sim_matrix[i, cluster_indices]))
+                    "weight": edge_weight
                 })
                 visited.update(cluster_indices)
         

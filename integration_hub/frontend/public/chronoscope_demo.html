@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>CHRONOSCOPE · Live Dashboard</title>
+<title>CHRONOSCOPE · Demo</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap');
@@ -183,7 +183,7 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 <!-- Connection banner — shown when awaiting data -->
 <div id="conn-banner">
   <div class="conn-dot"></div>
-  <span id="conn-msg">AWAITING CHRONOSCOPE DATA — connect via ChronoscopeBridge.push() or WebSocket ws://localhost:8765</span>
+  <span id="conn-msg">DEMO MODE — Simulated data stream active (no backend required) · open chronoscope_live.html for live analysis</span>
 </div>
 
 <div id="chat-island" class="collapsed">
@@ -636,8 +636,8 @@ function initCharts(nH){
               y:{min:0,max:1,grid:{color:'rgba(28,45,62,.4)'},ticks:{color:'#2a4060'},
                 title:{display:true,text:'PDC(j→target)',color:'#2a4060',font:{size:7}}}}}
   });
-if(charts.pdcHigh) charts.pdcHigh.destroy();
-  
+
+  if(charts.pdcHigh) charts.pdcHigh.destroy();
   charts.pdcHigh=mkChart('c-pdc-high',{
     type:'bar',
     data:{labels:Array.from({length:nH},(_,h)=>`H${h}`),
@@ -650,8 +650,8 @@ if(charts.pdcHigh) charts.pdcHigh.destroy();
               y:{min:0,max:1,grid:{color:'rgba(28,45,62,.4)'},ticks:{color:'#2a4060'},
                 title:{display:true,text:'PDC high-f',color:'#2a4060',font:{size:7}}}}}
   });
-
 if(charts.hmm) charts.hmm.destroy();
+  
   charts.hmm=mkChart('c-hmm',{
     type:'line',
     data:{labels:[],datasets:[
@@ -673,8 +673,8 @@ if(charts.hmm) charts.hmm.destroy();
         y2:{position:'right',min:0,max:5,grid:{display:false},ticks:{color:'#2a4060'},
           title:{display:true,text:'H entropy',color:'#2a4060',font:{size:7}}}}}
   });
-
 if(charts.sq) charts.sq.destroy();
+  
   charts.sq=mkChart('c-sq',{
     type:'bar',
     data:{labels:['SHANNON','RÉNYI','EFF·RANK','SINK','MAX·ATTN'],
@@ -1464,15 +1464,197 @@ function tryFilePoll(){
     .catch(()=>{});  // silently ignore — WebSocket is primary
 }
 
+// ── DEMO DATA GENERATOR ───────────────────────────────────────────────────────
+const DEMO_LABELS = ['PROMPT·PROC','SETUP','ACTIVE·CALC','CONCLUSION'];
+const DEMO_INTERP = [
+  {src:'TDA·Engine', text:'Betti-0 spike detected — model splitting into parallel hypothesis branches. EC variance elevated.'},
+  {src:'VAR·Analyser', text:'H3 → H7 Granger link confirmed (p=0.012). Head 3 is a <strong>leader</strong> — its past predicts Head 7\'s future entropy with lag 2.'},
+  {src:'Perturbation', text:'Zero-ablation of H3 causes H7 entropy drop −0.41 nats. Activation patching restores 84% of clean output.'},
+  {src:'HMM·Detector', text:'Phase transition: SETUP → ACTIVE·CALC. Transition probability 0.78. Constraint-balancing phase confirmed.'},
+  {src:'Stationarity', text:'Heads 2, 5, 11 non-stationary (ADF p>0.05, KPSS reject). Johansen rank=2 → VECM cointegration path.'},
+  {src:'SignalQuality', text:'Effective rank elevated across heads 0-6. Diffuse attention pattern consistent with broad context search.'},
+  {src:'CompScore', text:'DTW sensitivity 0.82, spectral coherence 0.75, topo smoothness 0.71 — composite signals point to STRONG REASONING.'},
+];
+
+const HMM_STATE_COLORS = ['#00d4ff','#00ff88','#ffb300','#aa66ff'];
+
+function makeDemoFrame(tick, phase){
+  const t = tick;
+  const nH = 14;
+  const nS = 4;
+
+  // ── Entropy signals ──────────────────────────────────────────────────
+  const baseH = Array.from({length:nH}, (_,i) => 1.2 + 0.8*Math.sin(t*0.07 + i*0.9) + 0.3*Math.random());
+  const entropy_row = baseH.map(v => +Math.max(0.05, v).toFixed(3));
+  const renyi       = entropy_row.map(v => +Math.max(0.05, v - 0.15 + 0.1*Math.random()).toFixed(3));
+  const effrank     = entropy_row.map(v => +(Math.min(1, v/5) + 0.05*Math.random()).toFixed(3));
+  const sink        = Array.from({length:nH}, () => +(0.03 + 0.04*Math.random()).toFixed(3));
+  const maxattn     = entropy_row.map(v => +(Math.max(0.02, 1 - v/5 + 0.1*Math.random())).toFixed(3));
+
+  // ── Stationarity ──────────────────────────────────────────────────────
+  const adf_pvals  = Array.from({length:nH}, (_,i) => +((i%3===0 ? 0.12+0.1*Math.random() : 0.01+0.03*Math.random())).toFixed(3));
+  const kpss_pvals = Array.from({length:nH}, (_,i) => +((i%3===0 ? 0.01+0.02*Math.random() : 0.15+0.1*Math.random())).toFixed(3));
+  const stat_per_head = Array.from({length:nH}, (_,i) => {
+    const adf = adf_pvals[i], kpss = kpss_pvals[i];
+    const diag = (adf<0.05 && kpss>0.05) ? 'stationary'
+               : (adf>0.05 && kpss<0.05) ? 'unit_root'
+               : (adf<0.05 && kpss<0.05) ? 'fractional' : 'ambiguous';
+    return {h:i, adf_pval:adf, kpss_pval:kpss, diagnosis:diag};
+  });
+  const adf_pval_pc0 = +(adf_pvals.reduce((a,v)=>a+v,0)/nH).toFixed(4);
+
+  // ── VAR influence matrix (14×14) ─────────────────────────────────────
+  const influence_matrix = Array.from({length:nH}, (_,r) =>
+    Array.from({length:nH}, (_,c) => r===c ? 0 :
+      +((r===2&&c===5?0.9+0.1*Math.random()
+        :r===5&&c===11?0.72+0.08*Math.random()
+        :r===0&&c===7?0.55+0.1*Math.random()
+        :0.02*Math.random())).toFixed(3))
+  );
+  const fdr_reject = influence_matrix.map(row => row.map(v => v > 0.5));
+  const pval_matrix = influence_matrix.map(row => row.map(v => v > 0.5 ? +(0.005+0.04*Math.random()).toFixed(4) : +(0.1+0.4*Math.random()).toFixed(4)));
+  const significant_pairs = [
+    {source:2, target:5,  score:+(0.9+0.1*Math.random()).toFixed(3),  pval:0.008, fdr_sig:true},
+    {source:5, target:11, score:+(0.72+0.08*Math.random()).toFixed(3), pval:0.018, fdr_sig:true},
+    {source:0, target:7,  score:+(0.55+0.1*Math.random()).toFixed(3),  pval:0.031, fdr_sig:true},
+  ];
+  const sig_pairs = significant_pairs.length;
+
+  // ── PDC ───────────────────────────────────────────────────────────────
+  const pdc_low  = Array.from({length:nH}, () => +(0.1 + 0.5*Math.random()).toFixed(3));
+  const pdc_high = Array.from({length:nH}, () => +(0.05 + 0.3*Math.random()).toFixed(3));
+
+  // ── Perturbation ──────────────────────────────────────────────────────
+  const perturbation_results = [
+    {head:2, target:5,  mode:'zero',  delta_entropy:+(-0.35-0.1*Math.random()).toFixed(3), restoration:+(0.82+0.05*Math.random()).toFixed(2), confirmed:true, kl_patch:+(0.12+0.04*Math.random()).toFixed(3)},
+    {head:5, target:11, mode:'mean',  delta_entropy:+(-0.18-0.06*Math.random()).toFixed(3),restoration:+(0.55+0.1*Math.random()).toFixed(2),  confirmed:true, kl_patch:+(0.08+0.03*Math.random()).toFixed(3)},
+    {head:0, target:7,  mode:'patch', delta_entropy:+(-0.12-0.05*Math.random()).toFixed(3),restoration:+(0.44+0.1*Math.random()).toFixed(2),  confirmed:false,kl_patch:+(0.04+0.02*Math.random()).toFixed(3)},
+  ];
+  const mediation_results = [
+    {source:2, target:11, mediator:5, ratio:+(0.61+0.05*Math.random()).toFixed(2), direct_effect:+(0.31+0.04*Math.random()).toFixed(2)},
+  ];
+
+  // ── TDA ───────────────────────────────────────────────────────────────
+  const betti0 = 2 + Math.floor(Math.random()*2);
+  const betti1 = Math.floor(Math.random()*2);
+  const euler  = betti0 - betti1;
+  const tau    = +Math.min(1, (tick % 120)/120 + 0.1*Math.random()).toFixed(3);
+  const topo_anomalies = tick % 30 < 3
+    ? [{token_idx: tick-1, severity:'med', description:'EC spike +3.2: topology reorganising'}]
+    : [];
+  if(!window._demoEC) window._demoEC = [];
+  window._demoEC.push(euler);
+  if(window._demoEC.length > 60) window._demoEC.shift();
+  const ec_series = [...window._demoEC];
+
+  // ── HMM ───────────────────────────────────────────────────────────────
+  const hmm_state_objs = DEMO_LABELS.map((lbl, i) => ({
+    label: lbl,
+    color: HMM_STATE_COLORS[i],
+    mean_entropy: +(1.2 + 0.5*i + 0.1*Math.random()).toFixed(2),
+    token_range: `t=${i*20}–${(i+1)*20}`,
+  }));
+  // Build a realistic state sequence (current phase dominates)
+  const hmm_state_seq = Array.from({length:Math.min(tick+1,60)}, (_,j) => {
+    const base = Math.floor(j/15) % nS;
+    return Math.random() < 0.85 ? base : (base+1)%nS;
+  });
+  const diag = 0.75; const off = (1-diag)/(nS-1);
+  const hmm_trans = Array.from({length:nS}, (_,r) => Array.from({length:nS}, (_,c) => +(r===c ? diag : off).toFixed(3)));
+
+  // ── Signal quality ────────────────────────────────────────────────────
+  const signal_quality = Array.from({length:nH}, (_,i) => ({
+    h:i, shannon:entropy_row[i], renyi:renyi[i], effrank:effrank[i], sink:sink[i], maxattn:maxattn[i],
+  }));
+
+  // ── Composite score ────────────────────────────────────────────────────
+  const dtw  = +(0.72+0.12*Math.sin(t*0.03)+0.05*Math.random()).toFixed(2);
+  const spec = +(0.68+0.10*Math.sin(t*0.04)+0.05*Math.random()).toFixed(2);
+  const topo = +(0.65+0.10*Math.cos(t*0.05)+0.05*Math.random()).toFixed(2);
+  const act  = +(0.75+0.10*Math.sin(t*0.06)+0.05*Math.random()).toFixed(2);
+  const te   = +(0.60+0.12*Math.sin(t*0.02)+0.05*Math.random()).toFixed(2);
+  const composite_score = Math.min(100, Math.max(0, Math.round((dtw+spec+topo+act+te)/5*100)));
+  const verdict = composite_score>=70 ? 'STRONG REASONING' : composite_score>=50 ? 'MODERATE REASONING' : 'HALLUCINATION RISK';
+
+  // ── Hurst ──────────────────────────────────────────────────────────────
+  const hurst = +(0.62+0.12*Math.sin(t*0.04)+0.03*Math.random()).toFixed(3);
+
+  // ── Log + interpretation ───────────────────────────────────────────────
+  const logOptions = [
+    {type:'gap',  msg:`VAR re-fitted: lag=3, sig_pairs=${sig_pairs}`},
+    {type:'tda',  msg:`EC=${euler} β₀=${betti0} β₁=${betti1} τ=${tau}`},
+    {type:'stat', msg:`ADF: ${adf_pvals.filter(p=>p<0.05).length}/14 stationary · coint_rank=2`},
+    {type:'pert', msg:`Ablation H2→H5: ΔH=${perturbation_results[0].delta_entropy} restore=${perturbation_results[0].restoration}`},
+    {type:'ok',   msg:`Phase: ${DEMO_LABELS[phase]} (state ${phase}) · τ=${tau}`},
+  ];
+  const interp = DEMO_INTERP[tick % DEMO_INTERP.length];
+
+  return {
+    // identity
+    n_heads: nH, token_idx: tick, layer_idx: 16,
+    model_name: 'Qwen2.5-3B', hidden_dim: 2048,
+    // stationarity
+    hurst, adf_pval_pc0, coint_rank: 2, vecm_used: true,
+    selected_lag: 3, sig_pairs,
+    stat_per_head,
+    // entropy
+    entropy_row,
+    // VAR + FDR
+    influence_matrix, fdr_reject, pval_matrix, significant_pairs,
+    // PDC
+    pdc_low, pdc_high,
+    // perturbation
+    perturbation_results, mediation_results, pert_mode: 'zero',
+    // TDA
+    betti0, betti1, euler, tau, topo_anomalies, ec_series,
+    // HMM
+    hmm_states: hmm_state_objs, hmm_n_states: nS,
+    hmm_state_seq, current_phase_idx: phase,
+    hmm_trans, hmm_bic: +(234.5 + 5*Math.random()).toFixed(1), hmm_ll: +(-117.2 - 2*Math.random()).toFixed(1),
+    // signal quality
+    signal_quality,
+    // score
+    composite_score, verdict,
+    dtw_sensitivity: dtw, spectral_coherence: spec,
+    topo_smoothness: topo, active_reasoning: act, te_score: te,
+    // misc
+    cot_time_axis: 'per-step', feat_mode: 'SHANNON',
+    velocity: +(0.12 + 0.05*Math.random()).toFixed(3),
+    // log + interp
+    log_events: [logOptions[tick % logOptions.length]],
+    interpretation: {source: interp.src, text: interp.text},
+  };
+}
+
+function startDemoMode(){
+  let tick = 0;
+  let phase = 0;
+  // Mark as connected so conn-banner hides
+  setConnected(true);
+  document.getElementById('conn-banner').classList.remove('hidden');
+  // Restyle the banner to show demo mode (amber → cyan/teal)
+  const banner = document.getElementById('conn-banner');
+  banner.style.background='rgba(0,212,255,.10)';
+  banner.style.borderTopColor='rgba(0,212,255,.25)';
+  banner.style.color='var(--cyan)';
+  // First frame immediately
+  ChronoscopeBridge.push(makeDemoFrame(tick, phase));
+  setInterval(()=>{
+    tick++;
+    // Advance HMM phase slowly
+    if(tick % 28 === 0) phase = (phase + 1) % 4;
+    ChronoscopeBridge.push(makeDemoFrame(tick, phase));
+  }, 700);
+}
+
 // ── INIT ──────────────────────────────────────────────────────────────────────
 function init(){
   initCharts(CFG.N_HEADS_DEFAULT);
   initChatIsland();
   setVarTab('inf');
-  tryWebSocket();
-  setInterval(tryFilePoll, CFG.POLL_INTERVAL);
-  addLog('ok','Dashboard initialised — awaiting ChronoscopeBridge.push(frame)');
-  addLog('gap','Connect via WebSocket ws://localhost:8765');
+  addLog('ok','DEMO MODE — Dashboard initialised with synthetic data stream');
+  addLog('gap','No backend required · open chronoscope_live.html for live analysis');
+  startDemoMode();
 }
 
 init();

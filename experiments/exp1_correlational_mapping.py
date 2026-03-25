@@ -36,17 +36,32 @@ console = Console()
 
 
 
-def run(config: ChronoscopeConfig = None):
-    """Execute Experiment 1: Correlational Mapping."""
+def run(
+    config: ChronoscopeConfig = None,
+    *,
+    _model=None,
+    _tokenizer=None,
+    _interceptor=None,
+    _bridge=None,
+):
+    """Execute Experiment 1: Correlational Mapping.
+
+    Keyword-only component overrides allow the continuous loop to reuse the
+    loaded model / bridge across prompts without reloading each iteration.
+    """
 
     if config is None:
         config = ChronoscopeConfig()
 
     console.rule("[bold blue]Chronoscope — Experiment 1: Correlational Mapping[/]")
 
-    # ── Step 1: Load Model ──────────────────────────────────────────────
-    console.print("\n[bold]Step 1:[/] Loading model...")
-    model, tokenizer = load_model(config)
+    # ── Step 1: Load Model (skip if caller supplies pre-built components) ──
+    if _model is not None and _tokenizer is not None:
+        model, tokenizer = _model, _tokenizer
+        console.print("[dim]Step 1: reusing pre-loaded model.[/]")
+    else:
+        console.print("\n[bold]Step 1:[/] Loading model...")
+        model, tokenizer = load_model(config)
 
     # Show available layers for hooking
     console.print("\n[bold]Hookable layers:[/]")
@@ -54,34 +69,60 @@ def run(config: ChronoscopeConfig = None):
 
     # ── Step 2: Initialize Components ───────────────────────────────────
     console.print("\n[bold]Step 2:[/] Initializing Chronoscope components...")
-    interceptor = ChronoscopeInterceptor(model, tokenizer, config)
+    if _interceptor is not None:
+        interceptor = _interceptor
+        interceptor._clear()  # reset activation buffers for the new prompt
+        console.print("[dim]Step 2: reusing existing interceptor (buffers cleared).[/]")
+    else:
+        interceptor = ChronoscopeInterceptor(model, tokenizer, config)
     observer = SignalObserver(config)
     analyzer = CausalAnalyzer(interceptor, observer, config)
     synthesizer = ReportSynthesizer(config)
 
     # ── Dashboard Bridge (Integration Guide §7) ────────────────────────
-    bridge = None
-    try:
-        bridge = DashboardBridge(
-            transport=getattr(config, "dashboard_transport", "websocket"),
-            ws_port=int(getattr(config, "dashboard_ws_port", 8765)),
-        ).start()
-        dashboard_url = bridge.serve_dashboard(
-            getattr(config, "dashboard_html_path", "integration_hub/frontend/public/chronoscope_live.html"),
-            port=int(getattr(config, "dashboard_http_port", 8766)),
-        )
-        console.print(f"  [bold green]Dashboard:[/] {dashboard_url}")
-        bridge.push_log("ok", f"Exp1 starting · model={config.model_name}")
-    except Exception as e:
+    if _bridge is not None:
+        bridge = _bridge
+        bridge.push_log("ok", f"New prompt · model={config.model_name}")
+    else:
         bridge = None
-        console.print(f"  [yellow]Dashboard bridge disabled: {e}[/]")
+        try:
+            bridge = DashboardBridge(
+                transport=getattr(config, "dashboard_transport", "websocket"),
+                ws_port=int(getattr(config, "dashboard_ws_port", 8765)),
+            ).start()
+            dashboard_url = bridge.serve_dashboard(
+                getattr(config, "dashboard_html_path", "integration_hub/frontend/public/chronoscope_live.html"),
+                port=int(getattr(config, "dashboard_http_port", 8766)),
+            )
+            console.print(f"  [bold green]Dashboard:[/] {dashboard_url}")
+            bridge.push_log("ok", f"Exp1 starting · model={config.model_name}")
+        except Exception as e:
+            bridge = None
+            console.print(f"  [yellow]Dashboard bridge disabled: {e}[/]")
 
     # ── Step 3: Capture Clean Trajectory ────────────────────────────────
     prompt = config.clean_prompt
     console.print(f"\n[bold]Step 3:[/] Capturing reasoning trajectory...")
     console.print(f"  Prompt: [italic]{prompt}[/]")
 
-    trajectory, generated_text = interceptor.capture_generation(prompt)
+    console.print(f"  Generating (streaming per token)...")
+    generated_text = ""
+    trajectory = {}
+    _stream_token_idx = 0
+    for _new_token, _cur_traj in interceptor.capture_generation_stream(prompt):
+        generated_text += _new_token
+        trajectory = _cur_traj
+        if bridge and _cur_traj:
+            bridge.push_token_frame(
+                token_idx=_stream_token_idx,
+                interceptor=interceptor,
+                observer=observer,
+                config=config,
+            )
+            _stat_every = getattr(config, "dashboard_stat_every", 5)
+            if _stream_token_idx % _stat_every == 0:
+                bridge.push_signal_quality_frame(interceptor, config)
+        _stream_token_idx += 1
 
     console.print(f"  Generated: [italic]{generated_text}[/]")
     console.print(f"  Layers captured: {len(trajectory)}")
@@ -111,19 +152,9 @@ def run(config: ChronoscopeConfig = None):
     console.print(f"\n[bold]Step 4:[/] Running classical time series analysis...")
     observer_results = observer.full_analysis(traj_tensor)
 
-    # Push per-token entropy frames to dashboard
+    # Token frames already pushed live during streaming above.
     if bridge:
-        metric_series = interceptor.get_head_metric_series(target_layer)
-        n_tokens = traj_tensor.shape[0] if hasattr(traj_tensor, "shape") else 0
-        for t in range(n_tokens):
-            bridge.push_token_frame(
-                token_idx=t,
-                interceptor=interceptor,
-                observer=observer,
-                config=config,
-            )
-        bridge.push_signal_quality_frame(interceptor, config)
-        bridge.push_log("ok", f"Streamed {n_tokens} token frames to dashboard")
+        bridge.push_log("ok", f"Streamed {_stream_token_idx} token frames live to dashboard")
 
     meta = observer_results["meta"]
     console.print(f"  Tokens: {meta['n_tokens']}, SVD components: {meta['n_svd_components']}")
@@ -289,6 +320,7 @@ def run(config: ChronoscopeConfig = None):
     )
 
     # Push composite score to dashboard
+    _owned_bridge = _bridge is None  # only stop the bridge if we created it
     if bridge:
         composite_frame = {
             "score": int(round(validity["composite_validity"] * 100)),
@@ -311,12 +343,29 @@ def run(config: ChronoscopeConfig = None):
         }
         bridge.push_score_frame(composite_frame, interpretation)
         bridge.push_log("ok", f"Exp1 complete · report={os.path.basename(report_path)}")
-        bridge.stop()
+        if _owned_bridge:
+            bridge.stop()
 
-    # Cleanup
-    interceptor.cleanup()
+    # Only fully clean up hooks when we own the interceptor
+    if _interceptor is None:
+        interceptor.cleanup()
 
     return report_path
+
+
+# ── Built-in rotating prompt bank for continuous mode ─────────────────────
+_PROMPT_BANK = [
+    "All cats are animals. Whiskers is a cat. Therefore, Whiskers is a",
+    "If it rains the ground gets wet. The ground is dry. Therefore,",
+    "All birds have wings. Penguins are birds. Penguins can fly?",
+    "2 + 2 = 4. 4 + 4 = 8. 8 + 8 = 16. 16 + 16 =",
+    "The French Revolution began in 1789. Napoleon came to power in",
+    "Water boils at 100°C. A pot is at 150°C. The water in it is",
+    "In a group of 30 students, 18 play football and 15 play basketball. How many play both?",
+    "If all roses are flowers and some flowers fade quickly, do all roses fade quickly?",
+    "John is taller than Mary. Mary is taller than Sue. Who is shortest?",
+    "The mitochondria produces ATP. ATP is the energy currency. Therefore mitochondria",
+]
 
 
 if __name__ == "__main__":
@@ -331,10 +380,85 @@ if __name__ == "__main__":
         type=str,
         help="Prompt to analyze instead of the default config.clean_prompt.",
     )
+    parser.add_argument(
+        "--continuous",
+        action="store_true",
+        help="Loop continuously through prompts, keeping model + dashboard alive.",
+    )
+    parser.add_argument(
+        "--prompts-file",
+        type=str,
+        default=None,
+        help="Path to a text file with one prompt per line (used with --continuous).",
+    )
+    parser.add_argument(
+        "--pause",
+        type=float,
+        default=2.0,
+        help="Seconds to pause between prompts in continuous mode (default: 2).",
+    )
     args = parser.parse_args()
 
     cfg = ChronoscopeConfig()
     if args.prompt:
         cfg.clean_prompt = args.prompt
 
-    run(cfg)
+    if not args.continuous:
+        run(cfg)
+    else:
+        import itertools
+        import time as _time
+
+        # Build prompt queue
+        if args.prompts_file:
+            with open(args.prompts_file, "r", encoding="utf-8") as _f:
+                _prompts = [line.strip() for line in _f if line.strip()]
+        elif args.prompt:
+            _prompts = [args.prompt]
+        else:
+            _prompts = list(_PROMPT_BANK)
+
+        console.rule("[bold magenta]Chronoscope — Continuous Mode[/]")
+        console.print(f"  Prompts in rotation: {len(_prompts)}")
+        console.print("  Press [bold]Ctrl+C[/] to stop.\n")
+
+        # Load model once
+        _model, _tokenizer = load_model(cfg)
+        _interceptor = ChronoscopeInterceptor(_model, _tokenizer, cfg)
+
+        # Start dashboard bridge once
+        _bridge = None
+        try:
+            _bridge = DashboardBridge(
+                transport=getattr(cfg, "dashboard_transport", "websocket"),
+                ws_port=int(getattr(cfg, "dashboard_ws_port", 8765)),
+            ).start()
+            _url = _bridge.serve_dashboard(
+                getattr(cfg, "dashboard_html_path", "integration_hub/frontend/public/chronoscope_live.html"),
+                port=int(getattr(cfg, "dashboard_http_port", 8766)),
+            )
+            console.print(f"  [bold green]Dashboard:[/] {_url}")
+        except Exception as _e:
+            console.print(f"  [yellow]Dashboard bridge disabled: {_e}[/]")
+
+        _iter = 1
+        try:
+            for _prompt in itertools.cycle(_prompts):
+                console.rule(f"[cyan]Iteration {_iter} / prompt: {_prompt[:60]}[/]")
+                cfg.clean_prompt = _prompt
+                run(
+                    cfg,
+                    _model=_model,
+                    _tokenizer=_tokenizer,
+                    _interceptor=_interceptor,
+                    _bridge=_bridge,
+                )
+                _iter += 1
+                if args.pause > 0:
+                    _time.sleep(args.pause)
+        except KeyboardInterrupt:
+            console.print("\n[yellow]Continuous mode stopped.[/]")
+        finally:
+            if _bridge:
+                _bridge.stop()
+            _interceptor.cleanup()

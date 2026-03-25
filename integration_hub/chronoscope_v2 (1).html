@@ -731,6 +731,7 @@ function mkChart(id,config){
 
 function initCharts(){
   // Entropy
+  if(charts.entropy) charts.entropy.destroy();
   charts.entropy=mkChart('c-entropy',{
     type:'line',
     data:{labels:[],datasets:Array.from({length:H},(_,h)=>({
@@ -747,6 +748,7 @@ function initCharts(){
 
   // VAR influence bar
   const pairs=Object.entries(TRUE_INF).sort((a,b)=>b[1]-a[1]).slice(0,9);
+  if(charts.var) charts.var.destroy();
   charts.var=mkChart('c-var',{
     type:'bar',
     data:{labels:pairs.map(p=>p[0]),datasets:[{
@@ -764,6 +766,7 @@ function initCharts(){
   });
 
   // EC
+  if(charts.ec) charts.ec.destroy();
   charts.ec=mkChart('c-ec',{
     type:'bar',
     data:{labels:[],datasets:[{data:[],backgroundColor:[],borderWidth:0,borderRadius:1}]},
@@ -774,6 +777,7 @@ function initCharts(){
 
   // PDC low
   const pdcFreqs=Array.from({length:32},(_,i)=>(i/64).toFixed(3));
+  if(charts.pdcLow) charts.pdcLow.destroy();
   charts.pdcLow=mkChart('c-pdc-low',{
     type:'bar',
     data:{labels:Array.from({length:H},(_,h)=>`H${h}`),
@@ -794,6 +798,7 @@ function initCharts(){
   });
 
   // PDC high — shows the period-2 peak
+  if(charts.pdcHigh) charts.pdcHigh.destroy();
   charts.pdcHigh=mkChart('c-pdc-high',{
     type:'bar',
     data:{labels:Array.from({length:H},(_,h)=>`H${h}`),
@@ -814,6 +819,7 @@ function initCharts(){
   });
 
   // HMM state chart
+  if(charts.hmm) charts.hmm.destroy();
   charts.hmm=mkChart('c-hmm',{
     type:'line',
     data:{labels:Array.from({length:T_MAX},(_,i)=>i),
@@ -842,6 +848,7 @@ function initCharts(){
 
   // Signal quality radar-ish bar
   const sqMetrics=['shannon','renyi','effrank','sink','maxattn'];
+  if(charts.sq) charts.sq.destroy();
   charts.sq=mkChart('c-sq',{
     type:'bar',
     data:{labels:sqMetrics.map(m=>m.toUpperCase()),

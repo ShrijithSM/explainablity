@@ -77,8 +77,12 @@ def load_model(config: ChronoscopeConfig):
             vram_headroom_gb=config.airllm_vram_headroom_gb
         )
     else:
-        # Optional 4-bit quantization for very tight VRAM
-        if config.load_in_4bit:
+        # Optional 4-bit quantization for very tight VRAM (only for 7B+ models)
+        # Disable for small models (<1B params) to avoid dependency issues
+        small_models = ["gpt2", "gpt2-medium", "gpt2-large", "distilgpt2"]
+        is_small_model = any(sm in config.model_name.lower() for sm in small_models)
+        
+        if config.load_in_4bit and not is_small_model:
             try:
                 from transformers import BitsAndBytesConfig
                 
@@ -96,6 +100,11 @@ def load_model(config: ChronoscopeConfig):
                 console.print(
                     "[red]bitsandbytes not installed. Loading without quantization.[/]"
                 )
+        elif config.load_in_4bit and is_small_model:
+            console.print(
+                f"[dim]4-bit quantization disabled for small model '{config.model_name}' "
+                "(not needed for <1B params)[/]"
+            )
 
         model = AutoModelForCausalLM.from_pretrained(model_ref, **kwargs)
         

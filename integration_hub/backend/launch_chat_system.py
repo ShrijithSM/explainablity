@@ -24,11 +24,11 @@ def main():
     # Paths
     repo_root = Path(__file__).parent.parent.parent
     backend_server = repo_root / "integration_hub" / "backend" / "chat_server.py"
-    frontend_html = repo_root / "integration_hub" / "frontend" / "chronoscope_chat.html"
-    
-    print(f"[•] Repo root: {repo_root}")
-    print(f"[•] Backend: {backend_server}")
-    print(f"[•] Frontend: {frontend_html}")
+    frontend_html = repo_root / "integration_hub" / "frontend" / "public" / "chronoscope_live.html"
+
+    print(f"[.] Repo root: {repo_root}")
+    print(f"[.] Backend: {backend_server}")
+    print(f"[.] Frontend: {frontend_html}")
     print()
     
     if not backend_server.exists():
@@ -48,15 +48,17 @@ def main():
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            encoding='utf-8',
+            errors='replace',
             bufsize=1
         )
-        print(f"[✓] Backend server started (PID: {backend_process.pid})")
+        print(f"[OK] Backend server started (PID: {backend_process.pid})")
     except Exception as e:
         print(f"[!] Failed to start backend: {e}")
         sys.exit(1)
     
     # Wait for server to be ready
-    print("[•] Waiting for server to initialize (10s)...")
+    print("[.] Waiting for server to initialize (10s)...")
     time.sleep(10)
     
     # Check if server is running
@@ -76,13 +78,14 @@ def main():
         print("[OK] Frontend opened in browser")
     except Exception as e:
         print(f"[!] Could not open browser: {e}")
-        print(f"[•] Manually visit: {frontend_url}")
+        print(f"[.] Manually visit: {frontend_url}")
     
     print("\n" + "=" * 70)
     print("SYSTEM RUNNING")
     print("=" * 70)
     print(f"Backend:    http://127.0.0.1:8000")
-    print(f"WebSocket:  ws://127.0.0.1:8000/ws/dashboard")
+    print(f"WebSocket:  ws://127.0.0.1:8765")
+    print(f"Dashboard:  http://127.0.0.1:8766  (served automatically)")
     print(f"Frontend:   {frontend_url}")
     print()
     print("Commands:")
@@ -109,8 +112,9 @@ def main():
         time.sleep(2)
         if backend_process.poll() is None:
             backend_process.kill()
-        print(f"[✓] System stopped")
+        print(f"[OK] System stopped")
 
 
 if __name__ == "__main__":
     main()
+

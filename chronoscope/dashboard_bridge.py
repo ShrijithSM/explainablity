@@ -106,6 +106,8 @@ class DashboardBridge:
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._thread: Optional[threading.Thread] = None
         self._last_frame: dict[str, Any] = {}
+        self._stop_event: Optional[asyncio.Event] = None
+        self._ws_server = None
 
         self._http_server = None
         self._http_thread: Optional[threading.Thread] = None
@@ -116,8 +118,13 @@ class DashboardBridge:
         return self
 
     def stop(self):
-        if self._loop:
-            self._loop.call_soon_threadsafe(self._loop.stop)
+        """Gracefully shutdown WebSocket server and event loop."""
+        if self._loop and self._stop_event:
+            # Signal the server to stop
+            self._loop.call_soon_threadsafe(self._stop_event.set)
+            # Wait briefly for graceful shutdown
+            time.sleep(0.2)
+        
         if self._http_server:
             try:
                 self._http_server.shutdown()
@@ -158,14 +165,16 @@ class DashboardBridge:
         if preferred_layer:
             metric_series = interceptor.get_head_metric_series(preferred_layer)
             if entropy_row is None and metric_series is not None and getattr(metric_series, "numel", lambda: 0)() > 0:
-                entropy_row = metric_series[-1]
+                _n = metric_series.shape[0]
+                entropy_row = metric_series[min(int(token_idx), _n - 1)]
         if entropy_row is None:
             summary = interceptor.debug_head_metric_summary()
             if summary:
                 fallback_layer = sorted(summary.keys())[-1]
                 metric_series = interceptor.get_head_metric_series(fallback_layer)
                 if entropy_row is None and metric_series is not None and getattr(metric_series, "numel", lambda: 0)() > 0:
-                    entropy_row = metric_series[-1]
+                    _n = metric_series.shape[0]
+                    entropy_row = metric_series[min(int(token_idx), _n - 1)]
 
         if entropy_row is not None and hasattr(entropy_row, "ndim") and entropy_row.ndim > 1:
             # Vector mode [H, F] -> default to first feature (Shannon-like stream)
@@ -559,13 +568,30 @@ class DashboardBridge:
                 self._ws_clients.discard(ws)
 
         async def _server():
-            async with websockets.serve(_handler, self.ws_host, self.ws_port):
-                await asyncio.Future()
+            async with websockets.serve(_handler, self.ws_host, self.ws_port) as server:
+                self._ws_server = server
+                # Wait for stop event instead of infinite Future
+                await self._stop_event.wait()
+                # Close server gracefully
+                server.close()
+                await server.wait_closed()
 
         def _run():
             self._loop = asyncio.new_event_loop()
             asyncio.set_event_loop(self._loop)
-            self._loop.run_until_complete(_server())
+            self._stop_event = asyncio.Event()
+            try:
+                self._loop.run_until_complete(_server())
+            except Exception:
+                pass
+            finally:
+                # Cancel remaining tasks
+                pending = asyncio.all_tasks(self._loop)
+                for task in pending:
+                    task.cancel()
+                # Give tasks a chance to complete cancellation
+                self._loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                self._loop.close()
 
         self._thread = threading.Thread(target=_run, daemon=True, name="chronoscope-ws")
         self._thread.start()

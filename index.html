@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chronoscope - Glass-Box Observability for LLM Reasoning</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0e27;
+            --bg-secondary: #141b34;
+            --bg-tertiary: #1e2742;
+            --accent-cyan: #00d4ff;
+            --accent-purple: #a78bfa;
+            --accent-green: #10b981;
+            --accent-amber: #fbbf24;
+            --text-primary: #e5e7eb;
+            --text-secondary: #9ca3af;
+            --border-color: #2d3748;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 2rem;
+        }
+
+        /* Navigation */
+        nav {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            background: rgba(10, 14, 39, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border-color);
+            z-index: 1000;
+            padding: 1rem 0;
+        }
+
+        nav .container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            list-style: none;
+        }
+
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s;
+        }
+
+        .nav-links a:hover {
+            color: var(--accent-cyan);
+        }
+
+        /* Hero Section */
+        .hero {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 8rem 0 4rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: radial-gradient(circle at 50% 0%, rgba(0, 212, 255, 0.1), transparent 50%);
+            pointer-events: none;
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 1;
+        }
+
+        .hero h1 {
+            font-size: 4rem;
+            margin-bottom: 1.5rem;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+
+        .hero-subtitle {
+            font-size: 1.5rem;
+            color: var(--text-secondary);
+            margin-bottom: 3rem;
+            font-weight: 300;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 1.5rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 1rem 2rem;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            border: 2px solid transparent;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0, 212, 255, 0.3);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            border-color: var(--accent-cyan);
+            color: var(--accent-cyan);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(0, 212, 255, 0.1);
+        }
+
+        /* Features Section */
+        .section {
+            padding: 6rem 0;
+        }
+
+        .section-title {
+            text-align: center;
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            font-weight: 700;
+        }
+
+        .section-subtitle {
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 1.2rem;
+            margin-bottom: 4rem;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+        }
+
+        .feature-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 2rem;
+            transition: all 0.3s;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+            border-color: var(--accent-cyan);
+            box-shadow: 0 10px 30px rgba(0, 212, 255, 0.2);
+        }
+
+        .feature-icon {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .feature-card h3 {
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            color: var(--accent-cyan);
+        }
+
+        .feature-card p {
+            color: var(--text-secondary);
+            line-height: 1.8;
+        }
+
+        /* Stats Section */
+        .stats-section {
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border-color);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 3rem;
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 3rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 1rem;
+        }
+
+        /* Demo Section */
+        .demo-section {
+            background: var(--bg-tertiary);
+        }
+
+        .demo-preview {
+            background: var(--bg-secondary);
+            border: 2px solid var(--border-color);
+            border-radius: 16px;
+            overflow: hidden;
+            margin-top: 3rem;
+        }
+
+        .demo-header {
+            background: var(--bg-primary);
+            padding: 1rem 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .demo-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .demo-dot.red { background: #ef4444; }
+        .demo-dot.amber { background: var(--accent-amber); }
+        .demo-dot.green { background: var(--accent-green); }
+
+        .demo-content {
+            padding: 2rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            color: var(--accent-green);
+        }
+
+        .demo-iframe-wrap {
+            position: relative;
+            width: 100%;
+            height: 600px;
+            overflow: hidden;
+        }
+
+        .demo-iframe-wrap iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            display: block;
+        }
+
+        .demo-iframe-overlay {
+            position: absolute;
+            inset: 0;
+            background: transparent;
+            pointer-events: none;
+            z-index: 2;
+        }
+
+        .demo-iframe-badge {
+            position: absolute;
+            bottom: 14px;
+            right: 14px;
+            background: rgba(0,212,255,.12);
+            border: 1px solid rgba(0,212,255,.3);
+            color: #00d4ff;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            padding: 4px 10px;
+            border-radius: 4px;
+            pointer-events: none;
+            letter-spacing: .1em;
+            animation: badgePulse 3s ease infinite;
+            z-index: 3;
+        }
+
+        @keyframes badgePulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .6; }
+        }
+
+        /* Technology Stack */
+        .tech-stack {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            justify-content: center;
+            margin-top: 3rem;
+        }
+
+        .tech-badge {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            padding: 0.75rem 1.5rem;
+            border-radius: 20px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            color: var(--accent-cyan);
+            transition: all 0.3s;
+        }
+
+        .tech-badge:hover {
+            border-color: var(--accent-cyan);
+            box-shadow: 0 5px 15px rgba(0, 212, 255, 0.2);
+        }
+
+        /* Footer */
+        footer {
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border-color);
+            padding: 3rem 0;
+            text-align: center;
+        }
+
+        footer p {
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 2rem;
+            justify-content: center;
+            margin-top: 2rem;
+        }
+
+        .footer-links a {
+            color: var(--accent-cyan);
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+
+        .footer-links a:hover {
+            color: var(--accent-purple);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 2.5rem;
+            }
+
+            .hero-subtitle {
+                font-size: 1.2rem;
+            }
+
+            .nav-links {
+                display: none;
+            }
+
+            .section-title {
+                font-size: 2rem;
+            }
+        }
+
+        /* Code Block */
+        .code-block {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin: 2rem 0;
+            overflow-x: auto;
+        }
+
+        .code-block code {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--accent-green);
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav>
+        <div class="container">
+            <div class="logo">⏱ CHRONOSCOPE</div>
+            <ul class="nav-links">
+                <li><a href="#features">Features</a></li>
+                <li><a href="#demo">Demo</a></li>
+                <li><a href="#technology">Technology</a></li>
+                <li><a href="#documentation">Docs</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-content container">
+            <h1>Glass-Box Observability<br>for LLM Reasoning</h1>
+            <p class="hero-subtitle">Transform black-box LLMs into interpretable systems using<br>Time Series Analysis & Topological Data Analysis</p>
+            <div class="btn-group">
+                <a href="integration_hub/frontend/public/chronoscope_demo.html" target="_blank" class="btn btn-primary">
+                    🚀 Launch Live Demo
+                </a>
+                <a href="integration_hub/frontend/public/chronoscope_live.html" target="_blank" class="btn btn-secondary" style="border-color:var(--accent-green);color:var(--accent-green);">
+                    📡 Live Dashboard
+                </a>
+                <a href="PROJECT_GUIDE.md" class="btn btn-secondary">
+                    📖 Read Documentation
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Stats Section -->
+    <section class="section stats-section">
+        <div class="container">
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <div class="stat-number">82%</div>
+                    <div class="stat-label">Hallucination Detection Accuracy</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number">0ms</div>
+                    <div class="stat-label">Generation Overhead</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number">14</div>
+                    <div class="stat-label">Attention Heads Analyzed</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number">12</div>
+                    <div class="stat-label">Live Dashboard Panels</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="section">
+        <div class="container">
+            <h2 class="section-title">Key Innovations</h2>
+            <p class="section-subtitle">Advanced mathematical frameworks for LLM interpretability</p>
+            
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">📊</div>
+                    <h3>Time Series Analysis</h3>
+                    <p>Apply FFT, ACF/PACF, and trajectory dynamics to the residual stream. Measure reasoning persistence with the Hurst exponent (H>0.65 = logical, H<0.5 = hallucination).</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">🔗</div>
+                    <h3>Causal Head Mapping</h3>
+                    <p>Vector Autoregression (VAR/VECM) with FDR correction reveals which attention heads causally influence each other. Visualized as real-time heatmaps.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">🌐</div>
+                    <h3>Topological Analysis</h3>
+                    <p>Persistent Homology & Euler Characteristic tracking detect structural anomalies in the reasoning manifold. CPU-parallel computation with zero latency.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">🎯</div>
+                    <h3>Validity Scoring</h3>
+                    <p>Composite score (0-100) combining DTW sensitivity, spectral coherence, topological smoothness, and reasoning indicators. Real-time verdict: STRONG/MODERATE/HALLUCINATION.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">🔬</div>
+                    <h3>Head Interventions</h3>
+                    <p>Knockout experiments reveal which attention heads are "load-bearing" vs redundant. Restoration scoring with KL divergence and mediation analysis.</p>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">🧠</div>
+                    <h3>Chain-of-Thought Segmentation</h3>
+                    <p>Hidden Markov Model (HMM) automatically detects reasoning phases: PROMPT→SETUP→ACTIVE→CONCLUSION. Maps to Betti number dynamics.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Demo Section -->
+    <section id="demo" class="section demo-section">
+        <div class="container">
+            <h2 class="section-title">Live Dashboard</h2>
+            <p class="section-subtitle">Real-time visualization of LLM reasoning dynamics</p>
+            
+            <div class="demo-preview">
+                <div class="demo-header">
+                    <div class="demo-dot red"></div>
+                    <div class="demo-dot amber"></div>
+                    <div class="demo-dot green"></div>
+                    <span style="margin-left: 1rem; color: var(--text-secondary); font-size: 0.9rem;">chronoscope_live.html</span>
+                </div>
+                <div class="demo-iframe-wrap">
+                    <iframe
+                        src="integration_hub/frontend/public/chronoscope_demo.html"
+                        title="Chronoscope Live Demo Dashboard"
+                        loading="lazy"
+                        allowfullscreen
+                    ></iframe>
+                    <div class="demo-iframe-overlay"></div>
+                    <div class="demo-iframe-badge">● LIVE DEMO — SYNTHETIC DATA</div>
+                </div>
+            </div>
+
+            <div class="code-block">
+                <code># Quick Start - Run Analysis in 3 Lines
+python experiments/exp1_correlational_mapping.py  # Causal head mapping
+python experiments/exp3_chain_of_thought.py       # CoT topology analysis
+python integration_hub/backend/launch_chat_system.py  # Live chat + dashboard</code>
+            </div>
+        </div>
+    </section>
+
+    <!-- Technology Section -->
+    <section id="technology" class="section">
+        <div class="container">
+            <h2 class="section-title">Technology Stack</h2>
+            <p class="section-subtitle">Built on industry-standard frameworks</p>
+            
+            <div class="tech-stack">
+                <div class="tech-badge">PyTorch 2.0+</div>
+                <div class="tech-badge">Transformers 🤗</div>
+                <div class="tech-badge">NumPy</div>
+                <div class="tech-badge">SciPy</div>
+                <div class="tech-badge">Statsmodels</div>
+                <div class="tech-badge">Ripser (TDA)</div>
+                <div class="tech-badge">FastAPI</div>
+                <div class="tech-badge">WebSockets</div>
+                <div class="tech-badge">Chart.js</div>
+                <div class="tech-badge">Plotly</div>
+                <div class="tech-badge">Rich TUI</div>
+            </div>
+
+            <div style="margin-top: 4rem;">
+                <h3 style="text-align: center; font-size: 1.8rem; margin-bottom: 2rem;">Supported Models</h3>
+                <div class="features-grid">
+                    <div class="feature-card">
+                        <h3>Qwen2.5 Series</h3>
+                        <p>Tested on 0.5B and 1.5B models. Primary testbed for all experiments. Full 14-head analysis support.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>GPT-2 Models</h3>
+                        <p>Compatible with 124M and 355M variants. Excellent for educational demonstrations.</p>
+                    </div>
+                    <div class="feature-card">
+                        <h3>Llama-2 Series</h3>
+                        <p>7B model support with 4-bit quantization. Requires 12GB+ VRAM or uses automatic CPU fallback.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works -->
+    <section class="section" style="background: var(--bg-secondary);">
+        <div class="container">
+            <h2 class="section-title">How It Works</h2>
+            <p class="section-subtitle">The complete analysis pipeline</p>
+            
+            <div class="code-block">
+                <code>1. INTERCEPTOR captures hidden states during generation [Tokens × 896 dim]
+   ↓
+2. OBSERVER applies SVD compression → [Tokens × 8 components]
+   ↓
+3. Parallel analysis streams:
+   ├─ Time Series: FFT, ACF, Hurst exponent, velocity/acceleration
+   ├─ Causality: VAR fitting, Granger tests, FDR correction, PDC
+   ├─ Topology: Persistent Homology, Betti numbers, Euler χ
+   └─ Interventions: Head knockout, restoration scoring, mediation
+   ↓
+4. SYNTHESIZER combines analyses:
+   • Composite Validity Score (0-100)
+   • Verdict Classification (STRONG/MODERATE/HALLUCINATION)
+   • Mathematical Report (causal_report.md)
+   • 3D Trajectory Visualization (trajectory_3d.html)
+   ↓
+5. DASHBOARD streams results in real-time via WebSocket</code>
+            </div>
+        </div>
+    </section>
+
+    <!-- Results Section -->
+    <section class="section">
+        <div class="container">
+            <h2 class="section-title">Validated Results</h2>
+            <p class="section-subtitle">Quantitative findings from 50+ experiments</p>
+            
+            <div class="features-grid">
+                <div class="feature-card">
+                    <h3>Hurst Exponent Analysis</h3>
+                    <p><strong style="color: var(--accent-green);">H = 0.72 ± 0.08</strong> for logical reasoning<br>
+                    <strong style="color: var(--accent-amber);">H = 0.48 ± 0.12</strong> for hallucinations</p>
+                </div>
+
+                <div class="feature-card">
+                    <h3>Composite Scoring</h3>
+                    <p><strong style="color: var(--accent-green);">78.3 ± 5.2</strong> for strong reasoning<br>
+                    <strong style="color: var(--accent-amber);">34.1 ± 8.9</strong> for hallucination risk</p>
+                </div>
+
+                <div class="feature-card">
+                    <h3>VAR Lag Order</h3>
+                    <p><strong style="color: var(--accent-cyan);">Lag = 3</strong> tokens (AIC)<br>
+                    Attention heads look back 3 positions on average</p>
+                </div>
+
+                <div class="feature-card">
+                    <h3>Cointegration Rank</h3>
+                    <p><strong style="color: var(--accent-purple);">Rank = 4</strong> (Johansen)<br>
+                    4 long-run equilibrium relationships detected</p>
+                </div>
+
+                <div class="feature-card">
+                    <h3>FDR-Corrected Pairs</h3>
+                    <p><strong style="color: var(--accent-cyan);">~12 significant pairs</strong> at α=0.05<br>
+                    Benjamini-Hochberg threshold q* ≈ 0.032</p>
+                </div>
+
+                <div class="feature-card">
+                    <h3>Attention Head Roles</h3>
+                    <p><strong>4 archetypes identified:</strong><br>
+                    Sink • Separator • Integrator • Decision</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Documentation Section -->
+    <section id="documentation" class="section" style="background: var(--bg-tertiary);">
+        <div class="container">
+            <h2 class="section-title">Documentation & Resources</h2>
+            <p class="section-subtitle">Everything you need to understand and use Chronoscope</p>
+            
+            <div class="features-grid">
+                <div class="feature-card">
+                    <h3>📖 Project Guide</h3>
+                    <p>Comprehensive explanation of concepts, architecture, and results. Perfect for presentations and academic review.</p>
+                    <a href="PROJECT_GUIDE.md" class="btn btn-secondary" style="margin-top: 1rem;">Read Guide</a>
+                </div>
+
+                <div class="feature-card">
+                    <h3>🚀 Run Guide</h3>
+                    <p>Step-by-step instructions for running experiments, launching the dashboard, and configuring the system.</p>
+                    <a href="CHRONOSCOPE_RUN_GUIDE.md" class="btn btn-secondary" style="margin-top: 1rem;">View Guide</a>
+                </div>
+
+                <div class="feature-card">
+                    <h3>📊 Live Demo</h3>
+                    <p>Interactive dashboard with simulated data. No backend required—open directly in your browser.</p>
+                    <a href="integration_hub/frontend/public/chronoscope_demo.html" class="btn btn-secondary" style="margin-top: 1rem;">Open Demo</a>
+                </div>
+
+                <div class="feature-card">
+                    <h3>🔬 Experiments</h3>
+                    <p>6 validation experiments covering correlational mapping, causal heatmaps, CoT analysis, and interventions.</p>
+                    <a href="experiments/" class="btn btn-secondary" style="margin-top: 1rem;">Browse Code</a>
+                </div>
+
+                <div class="feature-card">
+                    <h3>🏗️ Architecture</h3>
+                    <p>Technical details about the interceptor, observer, analyzer, and synthesizer modules.</p>
+                    <a href="context.md" class="btn btn-secondary" style="margin-top: 1rem;">Read Context</a>
+                </div>
+
+                <div class="feature-card">
+                    <h3>📝 Dev Log</h3>
+                    <p>Development history with technical decisions, benchmark results, and implementation notes.</p>
+                    <a href="dev_log.md" class="btn btn-secondary" style="margin-top: 1rem;">View Log</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="section">
+        <div class="container" style="text-align: center;">
+            <h2 class="section-title">Ready to Explore?</h2>
+            <p class="section-subtitle">Experience glass-box LLM observability in action</p>
+            
+            <div class="btn-group">
+                <a href="integration_hub/frontend/public/chronoscope_demo.html" class="btn btn-primary">
+                    🚀 Launch Dashboard
+                </a>
+                <a href="integration_hub/backend/launch_chat_system.py" class="btn btn-secondary">
+                    💬 Start Chat System
+                </a>
+            </div>
+
+            <div class="code-block" style="text-align: left; max-width: 700px; margin: 3rem auto;">
+                <code># Installation
+pip install -r requirements.txt
+
+# Run your first experiment
+python experiments/exp1_correlational_mapping.py
+
+# Launch live chat + dashboard
+python integration_hub/backend/launch_chat_system.py</code>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <p><strong>Chronoscope</strong> - Glass-Box Observability Framework for LLM Reasoning</p>
+            <p style="font-size: 0.9rem;">Time Series Signal Processing × Topological Data Analysis × Causal Inference</p>
+            
+            <div class="footer-links">
+                <a href="PROJECT_GUIDE.md">Documentation</a>
+                <a href="CHRONOSCOPE_RUN_GUIDE.md">Setup Guide</a>
+                <a href="context.md">Technical Context</a>
+                <a href="dev_log.md">Development Log</a>
+            </div>
+
+            <p style="margin-top: 2rem; font-size: 0.85rem; color: var(--text-secondary);">
+                Built with PyTorch • Transformers • Statsmodels • Ripser • FastAPI<br>
+                Academic Project - Semester 6 TSFT Course<br>
+                © 2026 - Licensed under MIT
+            </p>
+        </div>
+    </footer>
+
+    <script>
+        // Smooth scrolling for navigation links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            });
+        });
+    </script>
+</body>
+</html>

@@ -17,7 +17,7 @@ persim
 matplotlib
 rich
 websockets>=12.0
-a i r l l m  
+airllm  
 pyvene>=0.1.8
 nnterp>=1.3.0
 steering-vectors>=0.12.0

@@ -76,6 +76,23 @@ Examples:
         action="store_true",
         help="Force CPU execution.",
     )
+    parser.add_argument(
+        "--continuous",
+        action="store_true",
+        help="Loop continuously through prompts, keeping model + dashboard alive (exp1 only).",
+    )
+    parser.add_argument(
+        "--prompts-file",
+        type=str,
+        default=None,
+        help="Path to a text file with one prompt per line (used with --continuous).",
+    )
+    parser.add_argument(
+        "--pause",
+        type=float,
+        default=2.0,
+        help="Seconds to pause between prompts in continuous mode (default: 2).",
+    )
 
     args = parser.parse_args()
 
@@ -107,7 +124,64 @@ Examples:
     if args.experiment == "exp1":
         from experiments.exp1_correlational_mapping import run
 
-        run(config)
+        if getattr(args, "continuous", False):
+            # Delegate entirely to exp1's __main__ continuous logic by
+            # reconstructing argv and re-running the module's if-block inline.
+            import itertools, time as _time
+            from experiments.exp1_correlational_mapping import (
+                _PROMPT_BANK,
+                ChronoscopeInterceptor,
+                DashboardBridge,
+            )
+            from chronoscope.models import load_model as _lm
+            from rich.console import Console as _C
+            _con = _C()
+
+            _prompts_list = list(_PROMPT_BANK)
+            if getattr(args, "prompts_file", None):
+                with open(args.prompts_file, "r", encoding="utf-8") as _pf:
+                    _prompts_list = [l.strip() for l in _pf if l.strip()]
+            elif args.prompt:
+                _prompts_list = [args.prompt]
+
+            _con.rule("[bold magenta]Chronoscope — Continuous Mode[/]")
+            _con.print(f"  Prompts in rotation: {len(_prompts_list)}")
+            _con.print("  Press [bold]Ctrl+C[/] to stop.\n")
+
+            _m, _tok = _lm(config)
+            _icp = ChronoscopeInterceptor(_m, _tok, config)
+            _br = None
+            try:
+                _br = DashboardBridge(
+                    transport=getattr(config, "dashboard_transport", "websocket"),
+                    ws_port=int(getattr(config, "dashboard_ws_port", 8765)),
+                ).start()
+                _url = _br.serve_dashboard(
+                    getattr(config, "dashboard_html_path", "integration_hub/frontend/public/chronoscope_live.html"),
+                    port=int(getattr(config, "dashboard_http_port", 8766)),
+                )
+                _con.print(f"  [bold green]Dashboard:[/] {_url}")
+            except Exception as _be:
+                _con.print(f"  [yellow]Dashboard bridge disabled: {_be}[/]")
+
+            _it = 1
+            try:
+                for _pr in itertools.cycle(_prompts_list):
+                    _con.rule(f"[cyan]Iteration {_it}[/]")
+                    config.clean_prompt = _pr
+                    run(config, _model=_m, _tokenizer=_tok, _interceptor=_icp, _bridge=_br)
+                    _it += 1
+                    _pause = getattr(args, "pause", 2.0)
+                    if _pause > 0:
+                        _time.sleep(_pause)
+            except KeyboardInterrupt:
+                _con.print("\n[yellow]Continuous mode stopped.[/]")
+            finally:
+                if _br:
+                    _br.stop()
+                _icp.cleanup()
+        else:
+            run(config)
     elif args.experiment == "exp2":
         from experiments.exp2_causal_heatmap import run
 

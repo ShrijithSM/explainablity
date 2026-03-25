@@ -12,17 +12,15 @@ class ChronoscopeConfig:
     """All experiment parameters in one place."""
 
     # --- Model ---
-    model_name: str = "Qwen/Qwen2.5-0.5B" # Changed to 7B
-    n_heads: int = 14
-    hidden_dim: int = 896
+    model_name = "gpt2"  # Change to "Qwen/Qwen2.5-0.5B" when downloaded
+    n_heads: int = 12  # GPT-2 has 12 heads; Qwen2.5-0.5B has 14
+    hidden_dim: int = 768  # GPT-2: 768; Qwen2.5-0.5B: 896
     total_tokens: int = 100
-    target_layer: int = 23
-    local_model_snapshot_path: Optional[str] = (
-        r"C:\Users\sxhil_25660\.cache\huggingface\hub\models--Qwen--Qwen2.5-0.5B\snapshots\060db6499f32faf8b98477b0a26969ef7d8b9987"
-    )
+    target_layer: int = 11  # GPT-2 has 12 layers (0-11); Qwen has 24 (0-23)
+    local_model_snapshot_path: Optional[str] = None
     use_airllm: bool = False # Direct loading is now primary (resolves disk space issues)
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
-    load_in_4bit: bool = True  # Enabled for 7B models on 6GB VRAM
+    load_in_4bit: bool = False  # Only enable for 7B+ models on low VRAM
     torch_dtype: str = "float16"
 
     airllm_vram_headroom_gb: float = 1.0  # GB reserved for activations/buffers
@@ -31,7 +29,7 @@ class ChronoscopeConfig:
     # Layer name substrings to hook into. These target the output of each
     # decoder layer, which is the residual stream.
     target_layers: List[str] = field(
-        default_factory=lambda: ["layers."]  # Matches all decoder layers
+        default_factory=lambda: ["layers.", "h."]  # Matches Qwen (layers.) and GPT-2 (h.)
     )
     max_cache_size: int = 1000  # Number of tokens to retain in CPU RAM during generation
 
@@ -141,3 +139,12 @@ class ChronoscopeConfig:
             "float32": torch.float32,
         }
         return dtype_map.get(self.torch_dtype, torch.float16)
+
+    # ── NEXUS: Local LLM for hyperedge principle labeling ─────────────────
+    use_local_llm_labeling: bool = False
+    # Transport: "ollama" uses the Ollama HTTP API (localhost:11434).
+    #            "transformers" uses a HuggingFace pipeline on-device.
+    local_llm_transport: str = "ollama"       # "ollama" | "transformers"
+    local_llm_model: str = "qwen2.5-coder:3b" # Ollama model tag or HF repo id
+    local_llm_max_tokens: int = 60            # max tokens for label generation
+    local_llm_timeout: float = 10.0           # seconds per labeling request

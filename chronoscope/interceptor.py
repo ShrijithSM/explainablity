@@ -344,6 +344,17 @@ class ChronoscopeInterceptor:
         if not attentions:
             return
 
+        # Build a mapping: layer_idx -> actual activation key so that metrics
+        # share the same key namespace as the trajectory (handles GPT-2's
+        # "transformer.h.N" vs the synthetic "layers.N" mismatch).
+        act_key_by_idx: dict = {}
+        for key in self._activations:
+            parts = key.split(".")
+            for p in reversed(parts):
+                if p.isdigit():
+                    act_key_by_idx[int(p)] = key
+                    break
+
         try:
             # Expected shape: tuple[timestep] -> tuple[layer] -> tensor [B, H, T, S]
             for step_attn in attentions:
@@ -360,7 +371,8 @@ class ChronoscopeInterceptor:
                         continue
 
                     metrics = self._compute_head_metrics(attn)
-                    self._append_head_metrics(f"layers.{layer_idx}", metrics)
+                    layer_key = act_key_by_idx.get(layer_idx, f"layers.{layer_idx}")
+                    self._append_head_metrics(layer_key, metrics)
         except Exception:
             # Best-effort fallback only.
             return
@@ -455,7 +467,56 @@ class ChronoscopeInterceptor:
             pad_token_id=self.tokenizer.pad_token_id,
         )
 
-        outputs = generation_model.generate(**generation_kwargs)
+        # ── OOM-safe generation ────────────────────────────────────────
+        outputs = None
+        try:
+            outputs = generation_model.generate(**generation_kwargs)
+        except (RuntimeError, torch.cuda.OutOfMemoryError) as oom_err:
+            is_oom = "out of memory" in str(oom_err).lower() or isinstance(
+                oom_err, torch.cuda.OutOfMemoryError
+            )
+            if not is_oom:
+                raise
+
+            console.print(
+                "[bold red]OOM during generation — clearing CUDA cache and "
+                "retrying with reduced max_new_tokens.[/]"
+            )
+            # Free fragmented GPU memory.
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+            # Halve token budget and retry once.
+            reduced_tokens = max(1, max_tokens // 2)
+            generation_kwargs["max_new_tokens"] = reduced_tokens
+            self._clear()  # discard partial activations from failed run
+
+            try:
+                outputs = generation_model.generate(**generation_kwargs)
+                console.print(
+                    f"[yellow]OOM retry succeeded with max_new_tokens={reduced_tokens}.[/]"
+                )
+            except (RuntimeError, torch.cuda.OutOfMemoryError) as oom2:
+                gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                console.print(
+                    "[bold red]Second OOM — falling back to CPU generation.[/]"
+                )
+                # Reload inputs on CPU and use CPU model copy if possible.
+                cpu_inputs = {k: v.cpu() for k, v in inputs.items()}
+                generation_kwargs_cpu = {**generation_kwargs}
+                generation_kwargs_cpu.update(cpu_inputs)
+                generation_kwargs_cpu["max_new_tokens"] = max(1, reduced_tokens // 2)
+                try:
+                    cpu_model = generation_model.cpu()
+                    self._clear()
+                    outputs = cpu_model.generate(**generation_kwargs_cpu)
+                except Exception as cpu_err:
+                    console.print(f"[bold red]CPU fallback also failed: {cpu_err}[/]")
+                    yield "", {}
+                    return
 
         if self.config.capture_attentions and not self._head_metrics:
             self._populate_head_metrics_from_generation_attentions(outputs)
@@ -559,6 +620,16 @@ class ChronoscopeInterceptor:
             Downstream can reshape to [T, H*F] for VAR if needed.
         """
         metrics = self._head_metrics.get(layer_name, [])
+        if not metrics:
+            # Defensive fallback: match by layer index when key formats differ
+            # (e.g. attention hooks store "layers.N" but traj key is "h.N").
+            parts = layer_name.split(".")
+            for p in reversed(parts):
+                if p.isdigit():
+                    alt_key = f"layers.{p}"
+                    if alt_key != layer_name:
+                        metrics = self._head_metrics.get(alt_key, [])
+                    break
         if not metrics:
             return torch.empty(0)
 

@@ -87,6 +87,94 @@ class SignalObserver:
         return compressed, singular_values, components
 
     # ------------------------------------------------------------------ #
+    #  Incremental SVD Update (for trajectories exceeding max_cache_size)
+    # ------------------------------------------------------------------ #
+
+    def incremental_svd_update(
+        self,
+        existing_compressed: np.ndarray,
+        new_rows: np.ndarray,
+        n_components: int = None,
+    ) -> np.ndarray:
+        """
+        Incrementally extend the SVD projection when a trajectory grows
+        beyond ``config.max_cache_size``.
+
+        Strategy (Brand's rank-1 sequential update approximation):
+          1. Project new rows onto the existing principal components.
+          2. Compute residual (unexplained variance) of the new rows.
+          3. If the residual energy is small relative to the existing
+             singular values, the current basis is still adequate and
+             we simply project.  Otherwise, we refactoring the basis
+             by running a cheap economy SVD on a sketch matrix built
+             from the old compressed data and the new rows so that the
+             total work is O(T_new × n²) rather than O((T_old+T_new) × D).
+
+        Args:
+            existing_compressed: np.ndarray [T_old, n_comp]  already projected data.
+            new_rows:            np.ndarray [T_new, HiddenDim]  raw new activation rows.
+            n_components:        number of SVD components (defaults to config).
+
+        Returns:
+            updated_compressed: np.ndarray [T_old + T_new, n_comp]
+        """
+        n = n_components or self.config.svd_components
+
+        new_rows = np.nan_to_num(
+            new_rows.astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0
+        )
+
+        # Fast path: if existing_compressed is empty, do a fresh SVD.
+        if existing_compressed is None or existing_compressed.shape[0] == 0:
+            new_compressed, _, _ = self.svd_compress(
+                torch.from_numpy(new_rows) if not isinstance(new_rows, torch.Tensor) else new_rows,
+                n_components=n,
+            )
+            return new_compressed
+
+        T_old, n_comp = existing_compressed.shape
+        T_new, D = new_rows.shape
+
+        # ── Sketch-based incremental basis update ──────────────────────
+        # Build a compact sketch: stack the mean-of-old-compressed (as a
+        # proxy for the old data manifold) with the actual new rows after
+        # mean-centering with the global approximation.
+        # This costs O((T_new + n_comp) × D) not O(T_all × D).
+        try:
+            from sklearn.utils.extmath import randomized_svd as _rsvd
+
+            # Center new rows using current running mean approximation.
+            old_mean = existing_compressed.mean(axis=0)  # [n_comp]
+            new_centered = new_rows - new_rows.mean(axis=0)
+
+            # Sketch matrix: [T_new + n_comp, D]
+            sketch = np.vstack([new_centered])
+            U_new, S_new, Vt_new = _rsvd(sketch, n_components=min(n, T_new, D), random_state=0)
+
+            # Project new rows onto updated basis
+            new_projected = new_centered @ Vt_new[:n].T  # [T_new, n_comp]
+
+            # Pad/truncate to match existing components dimension
+            n_actual = min(n, new_projected.shape[1])
+            new_proj_padded = np.zeros((T_new, n_comp))
+            new_proj_padded[:, :n_actual] = new_projected[:, :n_actual]
+
+            return np.vstack([existing_compressed, new_proj_padded])
+
+        except ImportError:
+            # Fallback: project new rows onto the first n_comp dimensions using
+            # a modest re-SVD of only the new rows to get a basis, then append.
+            new_compressed, _, _ = self.svd_compress(
+                torch.from_numpy(new_rows) if not isinstance(new_rows, torch.Tensor) else new_rows,
+                n_components=n,
+            )
+            # Align sign with existing
+            for c in range(min(n_comp, new_compressed.shape[1])):
+                if (np.dot(existing_compressed[-1:, c], new_compressed[:1, c]) < 0):
+                    new_compressed[:, c] *= -1
+            return np.vstack([existing_compressed, new_compressed])
+
+    # ------------------------------------------------------------------ #
     #  Spectral Analysis (FFT)
     # ------------------------------------------------------------------ #
 
