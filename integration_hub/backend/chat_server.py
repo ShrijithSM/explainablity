@@ -55,7 +55,7 @@ class ChatRequest(BaseModel):
     max_tokens: int = Field(default=100, ge=1, le=2048)
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     run_var: bool = Field(default=True, description="Run VAR head interaction analysis post-generation")
-    run_intervention: bool = Field(default=False, description="Run head knockout intervention (slower)")
+    run_intervention: bool = Field(default=True, description="Run head knockout intervention (top-3 heads, deepest layer)")
 
 
 from pydantic import BaseModel, Field, model_validator
@@ -242,41 +242,62 @@ def run_post_analysis_background(target_layer, current_traj, prompt_len, token_c
                             _bridge.push_var_frame(head_result)
                             _bridge.push_log("ok", "VAR analysis complete")
 
+                        # ── D.4: HMM Phase Discovery ──────────────────────────
+                        if getattr(_config, "use_hmm_phase_discovery", False):
+                            try:
+                                series_for_hmm = head_result.get("series")
+                                if series_for_hmm is not None and series_for_hmm.shape[0] >= 10:
+                                    hmm_result = _analyzer._discover_phases_hmm(
+                                        series_for_hmm,
+                                        n_states=getattr(_config, "hmm_n_states", 4),
+                                    )
+                                    if "error" not in hmm_result and _bridge:
+                                        _bridge.push_hmm_frame(hmm_result, _config)
+                                        _bridge.push_log("ok", "HMM phases fitted")
+                            except Exception as hmm_e:
+                                print(f"[!] HMM failed: {hmm_e}")
+                                if _bridge:
+                                    _bridge.push_log("err", f"HMM: {str(hmm_e)[:60]}")
+
                         # ── Live Intervention (Knockout Probe) ──
                         if run_intervention:
                             print("[*] Background: Running live intervention...")
                             if _bridge:
                                 _bridge.push_log("pert", "Running live head interventions...")
-                            
-                            fdr_res = head_result.get("fdr_result", {})
+
+                            fdr_res = head_result.get("fdr_result") or {}
                             sig_pairs = fdr_res.get("significant_pairs", [])
                             if sig_pairs:
-                                source_heads = list(set([j for j, i, p in sig_pairs]))
-                                
-                                all_layers = sorted(current_traj.keys())
-                                causal_impact = _analyzer.interventional_head_causality_multilayer(
-                                    prompt, all_layers, source_heads
-                                )
-                                per_head = causal_impact.get("per_head_results", [])
-                                
-                                if per_head and _bridge:
-                                    pert_results = [
-                                        {
-                                            "head":          int(r["head"]),
-                                            "target":        int(r.get("target_head", -1)),
-                                            "mode":          "zero",
-                                            "delta_entropy": float(r.get("delta_entropy", 0.0)),
-                                            "restoration":   float(r.get("restoration", 0.0)),
-                                            "kl_patch":      float(r.get("kl_patch", 0.0)),
-                                            "confirmed":     float(r.get("restoration", 0.0)) > 0.5,
-                                        }
-                                        for r in per_head
-                                    ]
-                                    _bridge.push_perturbation_frame(pert_results, None)
-                                    _bridge.push_log("ok", f"Interventions complete on {len(pert_results)} heads")
+                                # Cap to top-3 source heads and deepest layer only (performance)
+                                source_heads = list(dict.fromkeys(
+                                    int(p[0]) for p in sig_pairs
+                                ))[:3]
+                                probe_layers = [target_layer] if target_layer else []
+
+                                if probe_layers:
+                                    causal_impact = _analyzer.interventional_head_causality_multilayer(
+                                        prompt, probe_layers, source_heads
+                                    )
+                                    per_head = causal_impact.get("per_head_results", [])
+
+                                    if per_head and _bridge:
+                                        pert_results = [
+                                            {
+                                                "head":          int(r["head"]),
+                                                "target":        int(r.get("target_head", -1)),
+                                                "mode":          "zero",
+                                                "delta_entropy": float(r.get("delta_entropy", 0.0)),
+                                                "restoration":   float(r.get("restoration", 0.0)),
+                                                "kl_patch":      float(r.get("kl_patch", 0.0)),
+                                                "confirmed":     float(r.get("restoration", 0.0)) > 0.5,
+                                            }
+                                            for r in per_head
+                                        ]
+                                        _bridge.push_perturbation_frame(pert_results, None)
+                                        _bridge.push_log("ok", f"Interventions complete on {len(pert_results)} heads")
                             else:
                                 if _bridge:
-                                    _bridge.push_log("pert", "No significant VAR pairs found to intervene on.")
+                                    _bridge.push_log("pert", "No significant VAR pairs — skipping intervention.")
                     else:
                         if _bridge:
                             _bridge.push_log("err", f"VAR: {head_result['error']}")

@@ -186,6 +186,10 @@ def run(
         if "error" in head_results:
             console.print(f"  [yellow]Head analysis skipped:[/] {head_results['error']}")
         else:
+            # Push VAR/FDR results to dashboard
+            if bridge:
+                bridge.push_var_frame(head_results)
+                bridge.push_log("ok", "VAR fitted — influence matrix & Granger pairs pushed to dashboard")
             series = head_results["series"]
             influence = head_results["influence_matrix"]
             H = influence.shape[0]

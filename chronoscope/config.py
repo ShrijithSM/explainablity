@@ -95,7 +95,7 @@ class ChronoscopeConfig:
     enable_bootstrap_surrogates: bool = False # expensive (500 VAR fits)
     n_bootstrap_surrogates: int = 500
     use_transfer_entropy: bool = False        # amber — model-free TE
-    compute_pdc: bool = False                 # partial directed coherence
+    compute_pdc: bool = True                  # partial directed coherence
 
     # ── Gap C: Perturbation / Intervention ─────────────────────────────────
     perturbation_mode: str = 'zero'           # 'zero' | 'mean' | 'gaussian'
@@ -122,7 +122,7 @@ class ChronoscopeConfig:
     euler_spike_threshold_std: float = 2.0
     use_arc_length_resampling: bool = False   # equal cognitive effort
     arc_length_n_points: int = 80
-    use_hmm_phase_discovery: bool = False     # amber — requires hmmlearn
+    use_hmm_phase_discovery: bool = True      # amber — requires hmmlearn
     hmm_n_states: int = 4
 
     # ── Gap E: Signal Quality ──────────────────────────────────────────────
