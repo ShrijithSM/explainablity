@@ -28,7 +28,7 @@
 
 ```bash
 # Clone the repository
-git clone <your-repo-url>
+git clone https://github.com/axls23/explainablity.git
 cd explainablity
 
 # Install dependencies
